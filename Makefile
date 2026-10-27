@@ -12,12 +12,16 @@ test:
 coverage:
 	python tools/coverage_report.py
 
-# Local detonation. Requires flightsim and threatest on PATH and an approved
-# detonation host. Read docs/testing-strategy.md before running this anywhere
-# that is not a lab.
+# Local detonation. Requires threatest on PATH, flightsim on the detonation
+# host, and DETONATION_HOST set to an approved host. Read
+# docs/testing-strategy.md before running this anywhere that is not a lab.
 detonate:
-	threatest lint scenarios/network.threatest.yaml
-	threatest run scenarios/network.threatest.yaml --output build/test-results.json
+	mkdir -p build/threatest
+	for f in $$(python tools/scenarios.py active); do \
+		threatest lint $$f && \
+		threatest run $$f --output build/threatest/$$(basename $$f .threatest.yaml).json || exit 1; \
+	done
+	python tools/detonate_flightsim.py
 
 all: validate test coverage
 

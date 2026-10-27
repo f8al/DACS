@@ -29,8 +29,9 @@
 - Reject "may generate noise" as a false positive entry. Name the source.
 - Reject an empty Blind Spots section. Every behavioral detection has an evasion.
   If the author cannot name one, they do not understand the technique yet.
-- Check the alert title against every Threatest scenario that asserts it. CI does
-  not catch a renamed title breaking an assertion.
+- Check that a renamed title was renamed in every Threatest scenario too. CI
+  fails when a scenario asserts a title no rule has, but not when a scenario
+  still asserts the right title for the wrong reason.
 - Ask what the expected weekly volume is and where the number came from.
 - Ask who gets paged and whether the runbook justifies it.
 

@@ -11,6 +11,10 @@ the program rules that a JSON schema cannot express on its own:
     runbook file that exists
   * a rule is stale when last_reviewed is older than review_interval_days
   * a scenario_file or detonation_command referenced by a rule exists
+  * a rule validated by threatest is asserted by its scenario_file under its
+    exact title, and every active scenario asserts the title of a real rule
+  * no flightsim command, in a rule or a scenario, names no module or runs a
+    module excluded from scheduled runs
   * base rules of a correlation are well formed and every correlation
     reference resolves to a base rule in the same file
   * no condition uses the deprecated Sigma pipe aggregation syntax
@@ -30,6 +34,7 @@ except ImportError:
     sys.exit("missing dependencies: pip install -r tools/requirements.txt")
 
 import rulefile
+import scenarios
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCHEMA = json.loads((ROOT / "schema" / "detection.schema.json").read_text())
@@ -81,8 +86,15 @@ def check(rule, path):
         errors.append(f"{prefix}scenario_file points at missing file {scenario}")
     if val.get("method") == "threatest" and not scenario:
         errors.append(f"{prefix}validation method threatest requires a scenario_file")
-    if val.get("method") == "flightsim" and not val.get("detonation_command"):
-        errors.append(f"{prefix}validation method flightsim requires a detonation_command")
+    if val.get("method") == "threatest" and scenario and (ROOT / scenario).exists():
+        if rule.get("title") not in scenarios.signal_names(ROOT / scenario).values():
+            errors.append(f"{prefix}no active scenario in {scenario} asserts the title {rule.get('title')!r}")
+    if val.get("method") == "flightsim":
+        command = val.get("detonation_command")
+        if not command:
+            errors.append(f"{prefix}validation method flightsim requires a detonation_command")
+        elif problem := scenarios.flightsim_problem(command):
+            errors.append(f"{prefix}detonation_command {command} {problem}")
 
     reviewed, interval = life.get("last_reviewed"), life.get("review_interval_days")
     if reviewed and interval:
@@ -131,10 +143,29 @@ def check_file(docs, path):
                 errors.append(f"{prefix}correlation references {ref}, which is not a base rule in this file")
 
 
+def check_scenarios(titles):
+    """Checks that start from the scenario files rather than the rules."""
+    for path in scenarios.files():
+        rel = path.relative_to(ROOT).as_posix()
+        try:
+            asserted = scenarios.signal_names(path)
+            commands = list(scenarios.remote_commands(path))
+        except (yaml.YAMLError, AttributeError, KeyError, TypeError) as exc:
+            errors.append(f"{rel}: unreadable scenario file: {exc}")
+            continue
+        for name, title in asserted.items():
+            if title not in titles:
+                errors.append(f"{rel}: scenario {name!r} asserts {title!r}, which is no rule's title")
+        for name, command in commands:
+            if command.lstrip().startswith("flightsim") and (problem := scenarios.flightsim_problem(command)):
+                errors.append(f"{rel}: scenario {name!r} command {command} {problem}")
+
+
 def main():
     files = sorted((ROOT / "detections").rglob("*.yml")) + sorted((ROOT / "detections").rglob("*.yaml"))
     if not files:
         sys.exit("no detection files found under detections/")
+    titles = set()
     for path in files:
         rel = path.relative_to(ROOT).as_posix()
         try:
@@ -149,8 +180,10 @@ def main():
         if rule is None:
             errors.append(f"{rel}: expected exactly one document with a detection_engineering block")
             continue
+        titles.add(rule.get("title"))
         check(rule, rel)
         check_file(docs, rel)
+    check_scenarios(titles)
 
     for w in warnings:
         print(f"WARN  {w}")

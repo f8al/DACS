@@ -21,7 +21,8 @@
 # control check allowing only refs/heads/main: a queued run of another branch
 # could otherwise rewrite this file and take the keys and the lab agent.
 #
-# The agent needs threatest, git and Python 3 with PyYAML on PATH.
+# The agent needs threatest, git and Python 3 with PyYAML on PATH, and SSH
+# access to DETONATION_HOST, which runs flightsim and any Atomic tests.
 trigger: none
 pr: none
 
@@ -34,9 +35,9 @@ schedules:
 
 parameters:
   - name: scenario
-    displayName: Scenario file to run
+    displayName: Scenario file to run, or all for every file with active scenarios
     type: string
-    default: scenarios/network.threatest.yaml
+    default: all
 
 variables:
   stampBranch: automation/stamp-last-validated
@@ -61,20 +62,40 @@ stages:
                 # Credentials persist so the stamp step can push its branch.
                 - checkout: self
                   persistCredentials: true
+                  clean: true
 
-                # Threatest detonates each scenario on DETONATION_HOST over SSH
-                # through its remoteDetonator, which runs flightsim there.
-                # flightsim is never run on the agent itself: a second
+                # Threatest detonates each remoteDetonator scenario on
+                # DETONATION_HOST over SSH, which is where flightsim and Atomic
+                # tests run. Neither is ever run on the agent itself: a second
                 # detonation from another address in the same window would
-                # muddy the host and time binding the assertions rely on. SSH
+                # muddy the host and time binding the assertions rely on.
+                # Stratus scenarios are the exception, they call the cloud API
+                # from the agent, see scenarios/cloud.threatest.yaml. SSH
                 # authenticates with the agent's ssh-agent or default key; add
                 # --ssh-keyfile to both commands to use a specific one.
+                #
+                # One results file per scenario file. A file that fails lint or
+                # a scenario that fails does not stop the other files from
+                # running. build/ is removed first because a self hosted agent
+                # keeps its workspace, and last night's results must never be
+                # stamped again.
                 - script: |
-                    mkdir -p build
-                    threatest lint "$SCENARIO"
-                    threatest run "$SCENARIO" \
-                      --output build/test-results.json \
-                      --parallelism 3
+                    rm -rf build
+                    mkdir -p build/threatest
+                    if [ "$SCENARIO" = all ]; then
+                      files=$(python3 tools/scenarios.py active) || exit 1
+                    else
+                      files=$SCENARIO
+                    fi
+                    status=0
+                    for f in $files; do
+                      echo "##[group]$f"
+                      threatest lint "$f" && threatest run "$f" \
+                        --output "build/threatest/$(basename "$f" .threatest.yaml).json" \
+                        --parallelism 3 || status=1
+                      echo "##[endgroup]"
+                    done
+                    exit $status
                   displayName: Detonate and assert via Threatest
                   env:
                     # Passed through the environment, not interpolated into
@@ -85,7 +106,19 @@ stages:
                     THREATEST_SSH_HOST: $(DETONATION_HOST)
                     THREATEST_SSH_USERNAME: $(DETONATION_USER)
 
-                - publish: build/test-results.json
+                # Rules validated by flightsim alone, without a Threatest
+                # scenario. Runs after Threatest has finished so the two never
+                # overlap on the host, and whether or not Threatest passed.
+                # Proves telemetry, not the alert, so nothing here is stamped.
+                # Skipped when a single scenario file was requested.
+                - script: python3 tools/detonate_flightsim.py
+                  displayName: Detonate rules validated by flightsim alone
+                  condition: and(not(canceled()), eq('${{ parameters.scenario }}', 'all'))
+                  env:
+                    DETONATION_HOST: $(DETONATION_HOST)
+                    DETONATION_USER: $(DETONATION_USER)
+
+                - publish: build
                   artifact: detonation-results
                   condition: succeededOrFailed()
 
@@ -93,11 +126,11 @@ stages:
                 # scenario must not stop the others from being stamped.
                 # stamp_validation.py stamps passes only.
                 - script: |
-                    if [ ! -f build/test-results.json ]; then
-                      echo "no results file, nothing to stamp"
+                    if ! ls build/threatest/*.json >/dev/null 2>&1; then
+                      echo "no Threatest results, nothing to stamp"
                       exit 0
                     fi
-                    python3 tools/stamp_validation.py build/test-results.json
+                    python3 tools/stamp_validation.py build/threatest/*.json || exit 1
                     if git diff --quiet -- detections/; then
                       echo "##vso[task.setvariable variable=stampChanged]false"
                     else
@@ -135,12 +168,12 @@ stages:
                     BRANCH: $(stampBranch)
                     SYSTEM_ACCESSTOKEN: $(System.AccessToken)
 
-                # One open work item per failing scenario. A scenario that
-                # keeps failing gets a comment per run on its existing work
-                # item, not a new one every night. Needs Edit work items in
+                # One open work item per failing scenario or flightsim rule.
+                # One that keeps failing gets a comment per run on its existing
+                # work item, not a new one every night. Needs Edit work items in
                 # this node on the area path for the build service.
-                - script: python3 tools/ado.py detonation-failures build/test-results.json
-                  displayName: Open or update a tuning work item for every failed assertion
+                - script: python3 tools/ado.py detonation-failures build/threatest/*.json build/flightsim-results.json
+                  displayName: Open or update a tuning work item for every failed detonation
                   condition: failed()
                   env:
                     SYSTEM_ACCESSTOKEN: $(System.AccessToken)

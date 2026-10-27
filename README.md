@@ -31,10 +31,11 @@ docs/ads/                       One ADS per detection, nine sections, all requir
 docs/runbooks/                  What the analyst does when it fires
 docs/standards/                 Detection standard, triage rubric, definition of done, deprecation policy
 docs/testing-strategy.md        The six testing tiers and detonation safety rules
-scenarios/*.threatest.yaml      End to end assertions
+scenarios/*.threatest.yaml      End to end assertions: flightsim and Atomic on the detonation host, Stratus in the cloud
 tests/unit, tests/data          Fixture replay, one positive and one negative per rule
 lookups/                        Allow lists and other reference data the platform applies at deploy time
-tools/                          Validation, coverage metrics, validation stamping, deployment,
+tools/                          Validation, coverage metrics, validation stamping, flightsim detonation,
+                                deployment,
                                 Azure DevOps setup (ado_setup.py) and pipeline glue (ado.py)
 .azuredevops/pipelines/         validate, detonate-nightly, deploy, hygiene
 .azuredevops/reviewers.yml      Path based required reviewers, the CODEOWNERS equivalent
@@ -61,6 +62,8 @@ python tools/coverage_report.py     # metrics plus ATT&CK Navigator layer
    Threatest ships matchers for Datadog and Elastic. For any other platform,
    implement a matcher against the Go interface: authenticate, poll the alert
    API, filter on name plus time window plus correlation id, return a boolean.
+   Each rule validates through a Threatest scenario or through flightsim alone;
+   `docs/testing-strategy.md` explains the choice and what each one proves.
 5. Run the setup once, with a personal access token in `AZURE_DEVOPS_EXT_PAT`
    (scopes listed in the script):
    `python tools/ado_setup.py --org https://dev.azure.com/your-org --project your-project --repo your-repo`.
@@ -99,7 +102,11 @@ python tools/coverage_report.py     # metrics plus ATT&CK Navigator layer
 9. A self hosted agent pool named `detonation-lab`, with an agent sitting
    inside the network whose telemetry you are testing. A Microsoft hosted agent
    is not inside your monitored network, so detonation from one proves nothing.
-   Detonation is off by default, twice over. The setup does not register
+   The agent needs `threatest`, git, and Python 3 with PyYAML on PATH and SSH
+   access to `DETONATION_HOST`; the detonation host needs flightsim, plus
+   PowerShell 7 and Invoke-AtomicRedTeam for Atomic scenarios. Stratus
+   scenarios use the agent's own cloud credentials, so scope them to a sandbox
+   account. Detonation is off by default, twice over. The setup does not register
    `detonate-nightly` unless you pass `--with-detonation`, and the pipeline
    skips its stage unless the pipeline variable `DETONATION_ENABLED` is `true`.
    Do both only once the agent is in place and `detonation-lab` has its

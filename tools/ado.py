@@ -145,10 +145,15 @@ def stamp_pr(args, client):
 
 
 def detonation_failures(args, client):
-    try:
-        results = json.loads(args.results.read_text())
-    except (OSError, ValueError):
-        results = []
+    # Threatest writes one file per scenario file and flightsim one more. A
+    # missing or unreadable file means that detonation did not get as far as
+    # writing results, which the run's own failure already reports.
+    results = []
+    for path in args.results:
+        try:
+            results += json.loads(path.read_text())
+        except (OSError, ValueError):
+            pass
     failed = [r for r in results if not r.get("isSuccess")]
     run = client.run_url()
 
@@ -163,13 +168,23 @@ def detonation_failures(args, client):
             client.update(existing, System_History="<p>Failed again.</p>" + "".join(detail))
             print(f"commented on work item #{existing}: {title}")
             continue
-        client.create(title, "".join([
-            f"<p>Scenario <b>{html.escape(str(r.get('description')))}</b> did not produce the expected signal.</p>",
-            *detail,
-            "<p>A failure here means one of: the rule broke, the data source stopped flowing,"
-            " the detonation was blocked by a control, or the timeout is too short."
-            " Distinguish blocked from undetected before tuning the rule.</p>",
-        ]), "tuning; detonation-failure")
+        name = html.escape(str(r.get("description")))
+        if str(r.get("description")).startswith("flightsim: "):
+            body = [
+                f"<p><b>{name}</b> did not complete on the detonation host.</p>",
+                *detail,
+                "<p>flightsim alone does not check the alert, so this is a detonation problem:"
+                " the host is unreachable, flightsim failed, or the command was refused as unsafe.</p>",
+            ]
+        else:
+            body = [
+                f"<p>Scenario <b>{name}</b> did not produce the expected signal.</p>",
+                *detail,
+                "<p>A failure here means one of: the rule broke, the data source stopped flowing,"
+                " the detonation was blocked by a control, or the timeout is too short."
+                " Distinguish blocked from undetected before tuning the rule.</p>",
+            ]
+        client.create(title, "".join(body), "tuning; detonation-failure")
     return 0
 
 
@@ -212,7 +227,7 @@ def main():
     p.set_defaults(func=stamp_pr)
 
     p = sub.add_parser("detonation-failures")
-    p.add_argument("results", type=pathlib.Path)
+    p.add_argument("results", type=pathlib.Path, nargs="+")
     p.set_defaults(func=detonation_failures)
 
     p = sub.add_parser("hygiene")

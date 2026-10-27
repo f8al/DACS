@@ -1,0 +1,28 @@
+# Threatest scenarios for endpoint detections, detonated with Atomic Red Team.
+#
+# Atomic tests run through the same remoteDetonator as flightsim: Threatest
+# connects to DETONATION_HOST over SSH and runs the commands there under a
+# parent process carrying its detonation UUID, which endpoint telemetry can
+# correlate on. The host needs PowerShell 7 and the Invoke-AtomicRedTeam
+# module with the atomics folder installed. Every remoteDetonator scenario in
+# the nightly run uses the same host, so an Atomic test for another operating
+# system needs a detonation host of that kind and its own run.
+#
+# Run the test's cleanup in the same scenario so a failed assertion does not
+# leave persistence behind on the host. Read the test's definition before
+# enabling it: some Atomic tests download payloads or change system settings.
+#
+# Every active scenario must assert a rule that exists in detections/; the
+# validator fails the build otherwise. Uncomment each one when its rule lands.
+scenarios:
+  # - name: Cron persistence on the detonation host
+  #   detonate:
+  #     remoteDetonator:
+  #       commands:
+  #         - pwsh -NoProfile -Command "Invoke-AtomicTest T1053.003 -TestNumbers 1"
+  #         - pwsh -NoProfile -Command "Invoke-AtomicTest T1053.003 -TestNumbers 1 -Cleanup"
+  #   expectations:
+  #     - timeout: 15m
+  #       datadogSecuritySignal:
+  #         name: "Scheduled Task Persistence via Crontab Modification"
+  #         severity: medium
