@@ -30,10 +30,10 @@ docs/ads/                       One ADS per detection, nine sections, all requir
 docs/runbooks/                  What the analyst does when it fires
 docs/standards/                 Detection standard, triage rubric, definition of done, deprecation policy
 docs/testing-strategy.md        The six testing tiers and detonation safety rules
-scenarios/*.threatest.yaml      End to end assertions
+scenarios/*.threatest.yaml      End to end assertions: flightsim and Atomic on the detonation host, Stratus in the cloud
 tests/unit, tests/data          Fixture replay, one positive and one negative per rule
 lookups/                        Allow lists and other reference data the platform applies at deploy time
-tools/                          Validation, coverage metrics, validation stamping, deployment
+tools/                          Validation, coverage metrics, validation stamping, flightsim detonation, deployment
 .github/workflows/              validate, detonate-nightly, deploy, hygiene
 ```
 
@@ -56,13 +56,19 @@ python tools/coverage_report.py     # metrics plus ATT&CK Navigator layer
    Threatest ships matchers for Datadog and Elastic. For any other platform,
    implement a matcher against the Go interface: authenticate, poll the alert
    API, filter on name plus time window plus correlation id, return a boolean.
+   Each rule validates through a Threatest scenario or through flightsim alone;
+   `docs/testing-strategy.md` explains the choice and what each one proves.
 5. Repository settings: branch protection on `main` requiring the `validate`
    checks and two approving reviews, plus protected environments
    `detonation-lab`, `siem-staging` and `siem-production` with required
    reviewers.
 6. A self hosted runner labelled `detonation-lab`, sitting inside the network
    whose telemetry you are testing. A hosted GitHub runner is not inside your
-   monitored network, so detonation from one proves nothing.
+   monitored network, so detonation from one proves nothing. The runner needs
+   `threatest` and Python 3 with PyYAML on PATH and SSH access to
+   `DETONATION_HOST`; the detonation host needs flightsim, plus PowerShell 7 and
+   Invoke-AtomicRedTeam for Atomic scenarios. Stratus scenarios use the
+   runner's own cloud credentials, so scope them to a sandbox account.
    Detonation is off by default. Once the runner is in place and the
    `detonation-lab` environment has required reviewers, opt in with
    `gh variable set DETONATION_ENABLED --body true`. Until then the nightly

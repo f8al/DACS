@@ -26,7 +26,7 @@ dashboards, tickets and Threatest assertions, so it is expensive to change.
   Volume Unique Subdomains", not "Suspicious DNS" and not "Iodine Detection".
 - Title case, 10 to 120 characters, no vendor product names, no internal jargon.
 - Changing a title requires updating every Threatest scenario that asserts it.
-  CI does not catch this, reviewers must.
+  The validator fails the build when a scenario asserts a title no rule has.
 
 ## File layout
 

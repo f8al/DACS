@@ -23,6 +23,41 @@ A rule must pass every tier below the one it claims.
   results in the Blind Spots section of the ADS, which is the artifact that
   carries this knowledge forward.
 
+## Choosing a validation method
+
+The nightly job runs two kinds of detonation. A rule picks one with
+`validation.method`.
+
+| Method | What runs | Tier reached | Stamps last_validated |
+|---|---|---|---|
+| `threatest` | Every active scenario in the rule's `scenario_file`, detonated and then asserted against the SIEM | 5 | Yes, automatically on a pass |
+| `flightsim` | The rule's `detonation_command` on the detonation host, with no assertion | 4 | No |
+
+Threatest is the default and the only path to an automatic stamp. Its
+detonator is chosen per scenario:
+
+- `remoteDetonator` runs commands on the detonation host over SSH: flightsim
+  modules (`scenarios/network.threatest.yaml`) and Atomic Red Team tests
+  through PowerShell (`scenarios/endpoint.threatest.yaml`).
+- `stratusRedTeamDetonator` runs a Stratus Red Team technique against a cloud
+  sandbox account from the runner (`scenarios/cloud.threatest.yaml`).
+
+Use `flightsim` alone for a rule whose alert cannot be queried by a Threatest
+matcher yet, or while a scenario is being written. It proves the traffic leaves
+the host and that a failure is not a broken detonation path, and nothing more.
+Its rule reaches `last_validated` only when an analyst confirms the alert from
+that night's run and stamps it by hand in a pull request, citing the run as
+evidence. Move it to a Threatest scenario as soon as one is possible.
+
+`atomic_red_team`, `stratus_red_team` and `manual` mean the detonation is run
+by hand outside the nightly job. A rule whose Atomic or Stratus detonation runs
+through a Threatest scenario uses `threatest`.
+
+The validator enforces the wiring: a `threatest` rule must be asserted by name
+in its scenario file, every active scenario must assert a real rule title, and
+a flightsim command, in a rule or a scenario, must name its modules and none of
+the modules excluded below.
+
 ## Detonation safety rules
 
 1. Detonation runs from a dedicated host with a dedicated egress address. Never
@@ -34,7 +69,9 @@ A rule must pass every tier below the one it claims.
    whoever owns the address space.
 3. The scan and spambot modules are excluded from scheduled runs. scan can trip
    IPS blocking and lock out the detonation host, spambot can get the egress
-   range listed.
+   range listed. ssh-exfil and ssh-transfer are excluded too, because they move
+   enough data to trip bandwidth and DLP controls. The validator rejects all
+   four in rules and scenarios.
 4. tunnel-icmp requires superuser privileges on the detonation host.
 5. Every scheduled run is announced to the SOC with the detonation host and the
    Threatest detonation UUID in the parent process, so a
@@ -65,8 +102,9 @@ which is what keeps assertions from passing on unrelated alerts of the same name
 flightsim does not do this. When flightsim is used as the detonator, the
 assertion binds on signal name plus time window plus source address, so the
 detonation host must not share its address with anything else that could trip
-the same rule. The nightly workflow runs flightsim only through the Threatest
-remote detonator, which executes it on the detonation host under a parent
-process containing the detonation UUID. Endpoint telemetry on that host can
+the same rule. The nightly workflow runs flightsim on the detonation host only, either
+through the Threatest remote detonator, which executes it under a parent
+process containing the detonation UUID, or for flightsim-only rules over SSH
+after Threatest has finished, so the two never share a window. Endpoint telemetry on that host can
 correlate against the UUID; resolver and network logs cannot, which is why the
 address rule above still applies.

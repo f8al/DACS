@@ -18,8 +18,8 @@ on:
   workflow_dispatch:
     inputs:
       scenario:
-        description: Scenario file to run
-        default: scenarios/network.threatest.yaml
+        description: Scenario file to run, blank for every file with active scenarios
+        default: ""
 
 permissions:
   contents: write        # push the stamp branch
@@ -39,39 +39,66 @@ jobs:
           # trigger the validate workflow, so its required checks never report.
           token: ${{ secrets.STAMP_PR_TOKEN || github.token }}
 
-      # Threatest detonates each scenario on DETONATION_HOST over SSH through its
-      # remoteDetonator, which runs flightsim there. flightsim is never run on
-      # the runner itself: a second detonation from another address in the same
-      # window would muddy the host and time binding the assertions rely on.
-      # SSH authenticates with the runner's agent or default key; add
-      # --ssh-keyfile to both commands to use a specific one.
+      # Threatest detonates each remoteDetonator scenario on DETONATION_HOST
+      # over SSH, which is where flightsim and Atomic tests run. Neither is ever
+      # run on the runner itself: a second detonation from another address in
+      # the same window would muddy the host and time binding the assertions
+      # rely on. Stratus scenarios are the exception, they call the cloud API
+      # from the runner, see scenarios/cloud.threatest.yaml. SSH authenticates
+      # with the runner's agent or default key; add --ssh-keyfile to both
+      # commands to use a specific one.
+      #
+      # One results file per scenario file. A file that fails lint or a
+      # scenario that fails does not stop the other files from running.
       - name: Detonate and assert via Threatest
         run: |
-          mkdir -p build
-          threatest lint "$SCENARIO"
-          threatest run "$SCENARIO" \
-            --output build/test-results.json \
-            --parallelism 3
+          mkdir -p build/threatest
+          files="${SCENARIO:-$(python tools/scenarios.py active)}"
+          status=0
+          for f in $files; do
+            echo "::group::$f"
+            threatest lint "$f" && threatest run "$f" \
+              --output "build/threatest/$(basename "$f" .threatest.yaml).json" \
+              --parallelism 3 || status=1
+            echo "::endgroup::"
+          done
+          exit $status
         env:
           # Passed through the environment, not interpolated into the script,
           # so a dispatch input cannot inject shell.
-          SCENARIO: ${{ inputs.scenario || 'scenarios/network.threatest.yaml' }}
+          SCENARIO: ${{ inputs.scenario }}
           DD_API_KEY: ${{ secrets.DD_API_KEY }}
           DD_APP_KEY: ${{ secrets.DD_APP_KEY }}
           THREATEST_SSH_HOST: ${{ vars.DETONATION_HOST }}
           THREATEST_SSH_USERNAME: ${{ vars.DETONATION_USER }}
 
+      # Rules validated by flightsim alone, without a Threatest scenario. Runs
+      # after Threatest has finished so the two never overlap on the host, and
+      # whether or not Threatest passed. Proves telemetry, not the alert, so
+      # nothing here is stamped. Skipped when one scenario file was dispatched.
+      - name: Detonate rules validated by flightsim alone
+        if: ${{ !cancelled() && !inputs.scenario }}
+        run: python tools/detonate_flightsim.py
+        env:
+          DETONATION_HOST: ${{ vars.DETONATION_HOST }}
+          DETONATION_USER: ${{ vars.DETONATION_USER }}
+
       - uses: actions/upload-artifact@v4
         if: always()
-        with: { name: detonation-results, path: build/test-results.json }
+        with:
+          name: detonation-results
+          path: |
+            build/threatest/
+            build/flightsim-results.json
+          if-no-files-found: ignore
 
       # Runs whether or not every scenario passed: one failing scenario must not
       # stop the others from being stamped. stamp_validation.py stamps passes only.
       - name: Stamp last_validated on rules that passed
         id: stamp
-        if: always() && hashFiles('build/test-results.json') != ''
+        if: always() && hashFiles('build/threatest/*.json') != ''
         run: |
-          python tools/stamp_validation.py build/test-results.json
+          python tools/stamp_validation.py build/threatest/*.json
           if git diff --quiet -- detections/; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
@@ -128,17 +155,24 @@ jobs:
             });
             core.info(`opened ${pr.html_url}`);
 
-      # One open issue per failing scenario. A scenario that keeps failing gets
-      # a comment per run on its existing issue, not a new issue every night.
-      - name: Open or update a tuning issue for every failed assertion
+      # One open issue per failing scenario or flightsim rule. One that keeps
+      # failing gets a comment per run on its existing issue, not a new issue
+      # every night.
+      - name: Open or update a tuning issue for every failed detonation
         if: failure()
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
             const { owner, repo } = context.repo;
+            const files = [
+              ...(fs.existsSync('build/threatest') ? fs.readdirSync('build/threatest').map(f => `build/threatest/${f}`) : []),
+              'build/flightsim-results.json',
+            ];
             let results = [];
-            try { results = JSON.parse(fs.readFileSync('build/test-results.json','utf8')); } catch (e) {}
+            for (const f of files) {
+              try { results.push(...JSON.parse(fs.readFileSync(f, 'utf8'))); } catch (e) {}
+            }
             const failed = results.filter(x => !x.isSuccess);
             if (!failed.length) return;
 
@@ -167,7 +201,14 @@ jobs:
               const { data: issue } = await github.rest.issues.create({
                 owner, repo, title,
                 labels: ['tuning','detonation-failure'],
-                body: [
+                body: (r.description.startsWith('flightsim: ') ? [
+                  `**${r.description}** did not complete on the detonation host.`,
+                  '',
+                  ...detail,
+                  '',
+                  'flightsim alone does not check the alert, so this is a detonation problem:',
+                  'the host is unreachable, flightsim failed, or the command was refused as unsafe.',
+                ] : [
                   `Scenario **${r.description}** did not produce the expected signal.`,
                   '',
                   ...detail,
@@ -175,7 +216,7 @@ jobs:
                   'A failure here means one of: the rule broke, the data source stopped flowing,',
                   'the detonation was blocked by a control, or the timeout is too short.',
                   'Distinguish blocked from undetected before tuning the rule.'
-                ].join('\n')
+                ]).join('\n')
               });
               open.set(title, issue.number);
             }
