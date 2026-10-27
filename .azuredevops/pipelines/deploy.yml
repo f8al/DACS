@@ -8,7 +8,12 @@
 # production token:
 #   siem-staging      SIEM_URL, SIEM_TOKEN (secret)
 #   siem-production   SIEM_URL, SIEM_TOKEN (secret), SOC_WEBHOOK (secret)
-# Either group can be linked to a Key Vault and carry its own approval check.
+# Either group can be linked to a Key Vault.
+#
+# This file is read from the tagged commit, so whoever can push a v* tag can
+# rewrite it, drop the environments and read the groups. The gates that hold
+# are the ones this file cannot remove: restrict Create tag on refs/tags/v* to
+# the release owners, and put an Approvals check on both variable groups.
 trigger:
   branches:
     include: [refs/tags/v*]
@@ -28,7 +33,7 @@ stages:
             deploy:
               steps:
                 - download: none
-                - checkout: self
+                - template: templates/tag-on-main.yml
                 - template: templates/python.yml
                 - script: python tools/deploy.py --target staging --stage production --stage in_test
                   displayName: Compile and push to staging
@@ -50,7 +55,7 @@ stages:
             deploy:
               steps:
                 - download: none
-                - checkout: self
+                - template: templates/tag-on-main.yml
                 - template: templates/python.yml
                 - script: python tools/deploy.py --target production --stage production
                   displayName: Compile and push production stage rules only

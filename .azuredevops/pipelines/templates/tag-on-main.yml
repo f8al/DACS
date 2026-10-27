@@ -1,0 +1,13 @@
+# Fails the job unless the commit being deployed is on main, so a v* tag on an
+# unmerged branch cannot ship. Defense in depth only: whoever pushes the tag
+# also controls this YAML. The real controls are the tag permission and the
+# approvals on the variable groups, see the README.
+steps:
+  - checkout: self
+    fetchDepth: 0
+  - script: |
+      git merge-base --is-ancestor HEAD origin/main || {
+        echo "##vso[task.logissue type=error]$(Build.SourceBranch) is not on main, refusing to deploy"
+        exit 1
+      }
+    displayName: Refuse to deploy a commit that is not on main

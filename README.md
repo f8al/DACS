@@ -88,6 +88,14 @@ python tools/coverage_report.py     # metrics plus ATT&CK Navigator layer
    do this before the first tag. Create the variable groups `siem-staging`
    (`SIEM_URL`, secret `SIEM_TOKEN`) and `siem-production` (the same plus
    secret `SOC_WEBHOOK`), and authorize the `deploy` pipeline to use them.
+   The `deploy` pipeline runs the YAML from the tagged commit, so anyone who
+   can push a `v*` tag can rewrite it to skip the environments. Two settings
+   close that, because the YAML cannot remove them. In Repos, Security, deny
+   Create tag to Contributors and allow it only to the release owners (Azure
+   DevOps sets tag permissions per repository, not per tag pattern, unless you
+   scope them with `az devops security permission update` on `refs/tags/v*`).
+   In Library, add an Approvals check to both variable groups, and have the
+   approver confirm the run's commit is on `main`.
 9. A self hosted agent pool named `detonation-lab`, with an agent sitting
    inside the network whose telemetry you are testing. A Microsoft hosted agent
    is not inside your monitored network, so detonation from one proves nothing.
