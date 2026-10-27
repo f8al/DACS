@@ -1,25 +1,26 @@
 # Detection as Code Scaffold
 
 A reusable, platform neutral scaffold for running a detection engineering
-program on GitHub. It implements the six phase detection engineering lifecycle
-(Requirements Discovery, Triage, Investigate, Develop, Test, Deploy), uses the
-Palantir ADS framework as the documentation artifact, and closes the loop with
-automated detonation testing via AlphaSOC flightsim and Datadog Threatest.
+program on Azure DevOps. It implements the six phase detection engineering
+lifecycle (Requirements Discovery, Triage, Investigate, Develop, Test, Deploy),
+uses the Palantir ADS framework as the documentation artifact, and closes the
+loop with automated detonation testing via AlphaSOC flightsim and Datadog
+Threatest.
 
 The design goal is repeatability: every phase produces an artifact, every
 artifact is checked by CI, and nothing reaches production on trust.
 
 ## Lifecycle to artifact mapping
 
-| Phase | GitHub mechanism | Artifact |
+| Phase | Azure DevOps mechanism | Artifact |
 |---|---|---|
-| 1. Requirements Discovery | Issue form, `.github/ISSUE_TEMPLATE/detection-request.yml` | Intake issue with required fields |
-| 2. Triage | Rubric applied on the issue, label and milestone | `priority_score` in rule metadata |
-| 3. Investigate | Issue discussion, data source check | `logsource.definition`, ADS sections 3 and 4 |
+| 1. Requirements Discovery | Boards work item template, `.azuredevops/work-item-templates/detection-request.yml` | Intake work item with every section answered |
+| 2. Triage | Rubric applied on the work item, tags and iteration | `priority_score` in rule metadata |
+| 3. Investigate | Work item discussion, data source check | `logsource.definition`, ADS sections 3 and 4 |
 | 4. Develop | Branch and pull request | Rule YAML plus ADS plus runbook |
-| 5. Test | `validate` and `detonate-nightly` workflows | Fixtures, Threatest scenario, `last_validated` stamp |
-| 6. Deploy | `deploy` workflow, tagged release, protected environment | Release notes, SOC notification |
-| Ongoing | `hygiene` workflow | Staleness report, metrics, Navigator layer |
+| 5. Test | `validate` and `detonate-nightly` pipelines | Fixtures, Threatest scenario, `last_validated` stamp |
+| 6. Deploy | `deploy` pipeline, tagged release, environments with approvals | Release notes, SOC notification |
+| Ongoing | `hygiene` pipeline | Staleness report, metrics, Navigator layer |
 
 ## Repository layout
 
@@ -33,8 +34,12 @@ docs/testing-strategy.md        The six testing tiers and detonation safety rule
 scenarios/*.threatest.yaml      End to end assertions
 tests/unit, tests/data          Fixture replay, one positive and one negative per rule
 lookups/                        Allow lists and other reference data the platform applies at deploy time
-tools/                          Validation, coverage metrics, validation stamping, deployment
-.github/workflows/              validate, detonate-nightly, deploy, hygiene
+tools/                          Validation, coverage metrics, validation stamping, deployment,
+                                Azure DevOps setup (ado_setup.py) and pipeline glue (ado.py)
+.azuredevops/pipelines/         validate, detonate-nightly, deploy, hygiene
+.azuredevops/reviewers.yml      Path based required reviewers, the CODEOWNERS equivalent
+.azuredevops/work-item-templates/  Detection request and tuning intake templates
+.azuredevops/pull_request_template.md  Definition of done checklist
 ```
 
 ## Quick start
@@ -48,32 +53,55 @@ python tools/coverage_report.py     # metrics plus ATT&CK Navigator layer
 
 ## What you must change to adopt this
 
-1. `.github/CODEOWNERS`: replace the placeholder teams.
-2. `.github/workflows/validate.yml`: set the `backend` matrix to your platform.
+1. `.azuredevops/reviewers.yml`: replace the placeholder project and groups.
+2. `.azuredevops/pipelines/validate.yml`: set the `backend` matrix to your platform.
 3. `tools/deploy.py`: implement `push()` for your SIEM. This is the only file
    that cannot be platform neutral and it is deliberately isolated.
 4. `scenarios/*.threatest.yaml`: the alert matcher keys shown are for Datadog.
    Threatest ships matchers for Datadog and Elastic. For any other platform,
    implement a matcher against the Go interface: authenticate, poll the alert
    API, filter on name plus time window plus correlation id, return a boolean.
-5. Repository settings: branch protection on `main` requiring the `validate`
-   checks and two approving reviews, plus protected environments
-   `detonation-lab`, `siem-staging` and `siem-production` with required
-   reviewers.
-6. A self hosted runner labelled `detonation-lab`, sitting inside the network
-   whose telemetry you are testing. A hosted GitHub runner is not inside your
-   monitored network, so detonation from one proves nothing.
-   Detonation is off by default. Once the runner is in place and the
-   `detonation-lab` environment has required reviewers, opt in with
-   `gh variable set DETONATION_ENABLED --body true`. Until then the nightly
-   workflow is skipped on schedule and on manual dispatch.
-7. Validation stamping: the nightly job records passing detonations by opening a
-   pull request that updates `last_validated`. Enable Settings, Actions,
-   "Allow GitHub Actions to create and approve pull requests", and add a
-   `STAMP_PR_TOKEN` secret (a GitHub App token or a fine grained token with
-   contents and pull requests write). Without the token the pull request still
-   opens, but GitHub does not run `validate` on it, so its required checks never
-   report.
+5. Run the setup once, with a personal access token in `AZURE_DEVOPS_EXT_PAT`
+   (scopes listed in the script):
+   `python tools/ado_setup.py --org https://dev.azure.com/your-org --project your-project --repo your-repo`.
+   It registers the `validate`, `deploy` and `hygiene` pipelines, puts a two
+   approval minimum (votes reset on push, the last pusher cannot approve), a
+   blocking `validate` build, a work item linking reminder
+   and the reviewers from step 1 on the default branch, and uploads the work
+   item templates to the project's default team (`--team` for another).
+   Azure Boards templates cannot make a field required, so "incomplete
+   requests are not triaged" is enforced by the triager, not the form.
+6. Work item type: the pipelines file tuning and hygiene work items as `Issue`
+   and close them as `Done`, which suits the Basic process. For Agile or CMMI
+   set the pipeline variable `WORK_ITEM_CLOSED_STATE` to `Closed`; for Scrum
+   also set `WORK_ITEM_TYPE` to `Impediment`. Set `AREA_PATH` to file them
+   somewhere other than the project root. Set the same `WORK_ITEM_TYPE` when
+   running the setup so the templates match.
+7. Build service permissions: the pipelines act as
+   `<project> Build Service (<org>)`. On the area path grant it Edit work items
+   in this node. On the repository grant it Contribute, Create branch,
+   Contribute to pull requests, and Force push on the
+   `automation/stamp-last-validated` branch.
+8. Environments: in Pipelines, Environments, create `siem-staging`,
+   `siem-production` and `detonation-lab` and add an Approvals check to each.
+   Azure DevOps creates a missing environment on first use with no checks, so
+   do this before the first tag. Create the variable groups `siem-staging`
+   (`SIEM_URL`, secret `SIEM_TOKEN`) and `siem-production` (the same plus
+   secret `SOC_WEBHOOK`), and authorize the `deploy` pipeline to use them.
+9. A self hosted agent pool named `detonation-lab`, with an agent sitting
+   inside the network whose telemetry you are testing. A Microsoft hosted agent
+   is not inside your monitored network, so detonation from one proves nothing.
+   Detonation is off by default, twice over. The setup does not register
+   `detonate-nightly` unless you pass `--with-detonation`, and the pipeline
+   skips its stage unless the pipeline variable `DETONATION_ENABLED` is `true`.
+   Do both only once the agent is in place and `detonation-lab` has its
+   approval check. The pipeline also needs the variables `DETONATION_HOST`,
+   `DETONATION_USER` and secrets `DD_API_KEY`, `DD_APP_KEY`:
+   `az pipelines variable create --pipeline-name detonate-nightly --name DETONATION_ENABLED --value true`.
+10. Validation stamping: the nightly pipeline records passing detonations by
+    opening a pull request that updates `last_validated`. A pull request
+    opened by the build service triggers the `validate` build policy like any
+    other, so no separate token is needed beyond the permissions in step 7.
 
 ## Design decisions worth defending
 

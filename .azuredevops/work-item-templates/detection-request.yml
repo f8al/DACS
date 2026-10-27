@@ -1,0 +1,35 @@
+# Applied by tools/ado_setup.py. Azure Boards templates prefill fields but
+# cannot make them required, so the intake rule is procedural: a request with
+# any section left unanswered is not triaged.
+name: Detection request
+description: The single front door for new detection coverage. Phase 1 of the lifecycle.
+fields:
+  System.Title: "[detection] "
+  System.Tags: detection-request; triage
+  System.Description: |
+    <p>Every detection starts here. Requests that arrive by chat or email get
+    pointed back to this template. Incomplete requests are not triaged. This
+    project is for detection content; live incidents go to the SOC at
+    https://example.internal/soc.</p>
+    <h3>Requirement source</h3>
+    <p>One of: threat_intel, red_team, purple_team, incident, compliance, vendor_gap, hunt, new_technology</p>
+    <h3>Adversary behavior to detect</h3>
+    <p>Describe the procedure, not the tool name. What does the adversary actually do on the host or the wire.</p>
+    <h3>ATT&amp;CK technique</h3>
+    <p>For example T1071.004</p>
+    <h3>Reference</h3>
+    <p>Threat intel report, red team finding, incident number or CVE.</p>
+    <h3>Threat severity if undetected</h3>
+    <p>1 low, 2 moderate, 3 significant, 4 severe</p>
+    <h3>Relevance to our environment</h3>
+    <p>Does this technique apply to platforms and assets we actually run.
+    1 edge case, 2 some assets, 3 broad, 4 crown jewels</p>
+    <h3>Existing coverage</h3>
+    <p>1 solid coverage exists, 2 partial or brittle, 3 adjacent only, 4 none</p>
+    <h3>Active exploitation</h3>
+    <p>1 theoretical, 2 reported in the wild, 3 active in our sector, 4 observed against us</p>
+    <h3>Expected data source</h3>
+    <p>Which log source would carry the evidence. Say unknown if that is the honest answer.</p>
+    <h3>How would we detonate this safely</h3>
+    <p>A flightsim module, an Atomic test number, a Stratus technique, or a
+    manual procedure. Optional, it becomes part of the investigate phase.</p>

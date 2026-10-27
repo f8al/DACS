@@ -22,8 +22,8 @@ Stop as soon as one of the close conditions below is met.
 - <specific, checkable condition>
 - <specific, checkable condition>
 
-If you close this alert as benign for a reason not listed here, open a tuning
-issue so the allow list and this runbook both get updated.
+If you close this alert as benign for a reason not listed here, open a tuning work
+item so the allow list and this runbook both get updated.
 
 ## Escalate when
 
@@ -41,6 +41,6 @@ Point at the ADS section rather than duplicating it.
 
 ## If this alert is noisy
 
-Open a tuning issue with the alert count for the last seven days. Do not
+Open a tuning work item with the alert count for the last seven days. Do not
 disable the rule in the console. Console changes are overwritten by the next
 deployment and leave no audit trail.

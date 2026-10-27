@@ -65,7 +65,7 @@ which is what keeps assertions from passing on unrelated alerts of the same name
 flightsim does not do this. When flightsim is used as the detonator, the
 assertion binds on signal name plus time window plus source address, so the
 detonation host must not share its address with anything else that could trip
-the same rule. The nightly workflow runs flightsim only through the Threatest
+the same rule. The nightly pipeline runs flightsim only through the Threatest
 remote detonator, which executes it on the detonation host under a parent
 process containing the detonation UUID. Endpoint telemetry on that host can
 correlate against the UUID; resolver and network logs cannot, which is why the

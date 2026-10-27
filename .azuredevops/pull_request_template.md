@@ -1,6 +1,6 @@
 ## What this changes
 
-Closes #
+Work item: #
 
 ## Definition of done
 
@@ -8,7 +8,7 @@ Every box must be checked or the reviewer will close this. See docs/standards/de
 
 ### Content
 - [ ] Rule validates against `schema/detection.schema.json` (CI proves this)
-- [ ] `detection_engineering.requirement.issue` points at the intake issue
+- [ ] `detection_engineering.requirement.work_item` points at the intake work item, and that work item is linked to this pull request
 - [ ] ATT&CK tags are correct at the subtechnique level where one applies
 - [ ] `logsource.definition` states exactly what telemetry is required, including collection caveats
 - [ ] False positives list is real and specific, not "may generate noise"

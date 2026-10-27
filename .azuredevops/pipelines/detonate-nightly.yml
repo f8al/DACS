@@ -1,0 +1,142 @@
+# Gate 5. The part most programs skip. Runs against a real lab or a ringfenced
+# segment of production, on a self hosted agent that lives where the telemetry
+# is collected. Never on a Microsoft hosted agent, because a hosted agent is
+# not inside your monitored network.
+#
+# Two switches, both off by default, because this pipeline generates real
+# traffic to live command and control infrastructure:
+#   1. The pipeline does not exist until someone registers it, either with
+#      tools/ado_setup.py --with-detonation or by hand. Do that only after the
+#      detonation-lab agent pool is inside the monitored network and the
+#      detonation-lab environment has an Approvals check. Azure DevOps creates
+#      a missing environment on first use with no checks, so the environment
+#      alone is not a gate until someone configures it.
+#   2. The stage is skipped unless the pipeline variable DETONATION_ENABLED is
+#      true. Set it in the pipeline's Variables, not in this file, which would
+#      override it.
+#
+# Pipeline variables, set in the pipeline's Variables:
+#   DD_API_KEY, DD_APP_KEY      secret
+#   DETONATION_HOST, DETONATION_USER
+#
+# The agent needs threatest, git and Python 3 with PyYAML on PATH.
+trigger: none
+pr: none
+
+schedules:
+  - cron: "0 7 * * 1-5"   # 07:00 UTC on weekdays
+    displayName: Weekday detonation
+    branches:
+      include: [main]
+    always: true          # detonation tests telemetry, which changes without commits
+
+parameters:
+  - name: scenario
+    displayName: Scenario file to run
+    type: string
+    default: scenarios/network.threatest.yaml
+
+variables:
+  stampBranch: automation/stamp-last-validated
+
+stages:
+  - stage: network_detonation
+    displayName: network-detonation
+    condition: eq(variables['DETONATION_ENABLED'], 'true')
+    jobs:
+      - deployment: network_detonation
+        displayName: network-detonation
+        environment: detonation-lab
+        pool: detonation-lab
+        timeoutInMinutes: 60
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: none
+                # Credentials persist so the stamp step can push its branch.
+                - checkout: self
+                  persistCredentials: true
+
+                # Threatest detonates each scenario on DETONATION_HOST over SSH
+                # through its remoteDetonator, which runs flightsim there.
+                # flightsim is never run on the agent itself: a second
+                # detonation from another address in the same window would
+                # muddy the host and time binding the assertions rely on. SSH
+                # authenticates with the agent's ssh-agent or default key; add
+                # --ssh-keyfile to both commands to use a specific one.
+                - script: |
+                    mkdir -p build
+                    threatest lint "$SCENARIO"
+                    threatest run "$SCENARIO" \
+                      --output build/test-results.json \
+                      --parallelism 3
+                  displayName: Detonate and assert via Threatest
+                  env:
+                    # Passed through the environment, not interpolated into
+                    # the script, so a run parameter cannot inject shell.
+                    SCENARIO: ${{ parameters.scenario }}
+                    DD_API_KEY: $(DD_API_KEY)
+                    DD_APP_KEY: $(DD_APP_KEY)
+                    THREATEST_SSH_HOST: $(DETONATION_HOST)
+                    THREATEST_SSH_USERNAME: $(DETONATION_USER)
+
+                - publish: build/test-results.json
+                  artifact: detonation-results
+                  condition: succeededOrFailed()
+
+                # Runs whether or not every scenario passed: one failing
+                # scenario must not stop the others from being stamped.
+                # stamp_validation.py stamps passes only.
+                - script: |
+                    if [ ! -f build/test-results.json ]; then
+                      echo "no results file, nothing to stamp"
+                      exit 0
+                    fi
+                    python3 tools/stamp_validation.py build/test-results.json
+                    if git diff --quiet -- detections/; then
+                      echo "##vso[task.setvariable variable=stampChanged]false"
+                    else
+                      echo "##vso[task.setvariable variable=stampChanged]true"
+                    fi
+                  displayName: Stamp last_validated on rules that passed
+                  condition: succeededOrFailed()
+
+                # main is protected, so the stamp lands through a pull request.
+                # One standing branch, rebuilt from main each run, so unmerged
+                # stamps collapse into a single pull request instead of one per
+                # night. Stamps from an earlier unmerged run are replaced by
+                # tonight's. Unlike GitHub, a pull request the build service
+                # opens does trigger the validate build policy.
+                #
+                # Grant "<project> Build Service (<org>)" on this repository:
+                # Contribute, Create branch, Contribute to pull requests, and
+                # Force push on the stamp branch.
+                - script: |
+                    git config user.name "Detection pipeline"
+                    git config user.email "detection-pipeline@noreply.invalid"
+                    git checkout -B "$BRANCH"
+                    git add detections/
+                    git commit -m "Stamp last_validated from detonation run $(Build.BuildId)"
+                    git push --force origin "HEAD:refs/heads/$BRANCH"
+                  displayName: Push the stamp branch
+                  condition: and(succeededOrFailed(), eq(variables.stampChanged, 'true'))
+                  env:
+                    BRANCH: $(stampBranch)
+
+                - script: python3 tools/ado.py stamp-pr --branch "$BRANCH"
+                  displayName: Create the stamp pull request if none is open
+                  condition: and(succeededOrFailed(), eq(variables.stampChanged, 'true'))
+                  env:
+                    BRANCH: $(stampBranch)
+                    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+
+                # One open work item per failing scenario. A scenario that
+                # keeps failing gets a comment per run on its existing work
+                # item, not a new one every night. Needs Edit work items in
+                # this node on the area path for the build service.
+                - script: python3 tools/ado.py detonation-failures build/test-results.json
+                  displayName: Open or update a tuning work item for every failed assertion
+                  condition: failed()
+                  env:
+                    SYSTEM_ACCESSTOKEN: $(System.AccessToken)

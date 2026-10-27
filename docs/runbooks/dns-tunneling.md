@@ -59,6 +59,6 @@ See docs/ads/dns-tunneling.md section 6.
 
 ## If this alert is noisy
 
-Open a tuning issue with seven days of alert counts grouped by registered domain.
+Open a tuning work item with seven days of alert counts grouped by registered domain.
 The fix is almost always an allow list addition, not a threshold change. Do not
 disable the rule in the console.

@@ -1,0 +1,21 @@
+# Path based required reviewers, the Azure DevOps stand in for CODEOWNERS.
+# tools/ado_setup.py turns each entry into a Required reviewers policy on the
+# default branch.
+#
+# Replace your-project with your project and each group with a team or group
+# that exists. One approval from any listed group satisfies an entry; the two
+# approval minimum comes from the Minimum number of reviewers policy.
+#
+# Later entries win, as in CODEOWNERS. /.azuredevops/ is last so this file and
+# the pipelines, which define the review and deploy gates, can only be changed
+# with lead approval.
+- path: /*
+  groups: ["[your-project]\\detection-engineering"]
+- path: /detections/*
+  groups: ["[your-project]\\detection-engineering", "[your-project]\\soc-leads"]
+- path: /schema/*
+  groups: ["[your-project]\\detection-engineering-leads"]
+- path: /docs/standards/*
+  groups: ["[your-project]\\detection-engineering-leads"]
+- path: /.azuredevops/*
+  groups: ["[your-project]\\detection-engineering-leads"]

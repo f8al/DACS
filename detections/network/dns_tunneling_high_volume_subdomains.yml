@@ -67,7 +67,7 @@ detection_engineering:
     last_reviewed: "2026-09-30"
   requirement:
     source: purple_team
-    issue: "#112"
+    work_item: "#112"
     priority_score: 78
   validation:
     method: threatest

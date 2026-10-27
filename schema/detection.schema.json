@@ -67,10 +67,10 @@
         "requirement": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["source", "issue", "priority_score"],
+          "required": ["source", "work_item", "priority_score"],
           "properties": {
             "source": { "enum": ["threat_intel", "red_team", "purple_team", "incident", "compliance", "vendor_gap", "hunt", "new_technology"] },
-            "issue": { "type": "string", "pattern": "^#[0-9]+$" },
+            "work_item": { "type": "string", "pattern": "^#[0-9]+$" },
             "priority_score": { "type": "integer", "minimum": 0, "maximum": 100 }
           }
         },

@@ -1,0 +1,18 @@
+# Applied by tools/ado_setup.py. The detonation pipeline files these itself
+# for failed scenarios; this template is for the ones opened by hand.
+name: Detection tuning
+description: A production rule is over budget, imprecise or broken.
+fields:
+  System.Title: "[tuning] "
+  System.Tags: tuning
+  System.Description: |
+    <h3>Rule id</h3>
+    <p></p>
+    <h3>Problem</h3>
+    <p>One of: over volume budget, false positives, rule is not firing, logic
+    error, data source changed, response guidance is wrong</p>
+    <h3>Evidence</h3>
+    <p>Alert counts, sample events, analyst feedback.</p>
+    <h3>Proposed action</h3>
+    <p>One of: tune logic, add suppression, downgrade to hunt_only, raise volume
+    budget, deprecate</p>

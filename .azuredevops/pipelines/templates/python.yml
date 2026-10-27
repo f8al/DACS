@@ -1,0 +1,15 @@
+# Python 3.12 with a pip cache keyed on the requirements, then the tool
+# requirements. Shared by every job that runs on a Microsoft hosted agent.
+steps:
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: "3.12"
+  - task: Cache@2
+    displayName: Cache pip
+    inputs:
+      key: 'pip | "$(Agent.OS)" | tools/requirements.txt'
+      path: $(Pipeline.Workspace)/.pip
+  - script: pip install -r tools/requirements.txt
+    displayName: Install tool requirements
+    env:
+      PIP_CACHE_DIR: $(Pipeline.Workspace)/.pip

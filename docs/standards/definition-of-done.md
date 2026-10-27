@@ -33,5 +33,5 @@ the pull request template and enforced by CI wherever enforcement is possible.
 
 A rule may only move to lifecycle stage production after the nightly detonation
 job has passed for it at least once and last_validated is stamped. Merging to
-main is not deployment. Deployment is a tagged release through a protected
-environment.
+main is not deployment. Deployment is a tagged release through an environment
+with an approval check.

@@ -57,7 +57,7 @@ def main():
         with urllib.request.urlopen(req, timeout=15) as resp:
             print(f"notified SOC, HTTP {resp.status}")
     except OSError as exc:
-        print(f"::warning::SOC notification failed, rules are deployed: {exc}")
+        print(f"##vso[task.logissue type=warning]SOC notification failed, rules are deployed: {exc}")
     return 0
 
 

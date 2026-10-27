@@ -1,0 +1,54 @@
+# Gate 1 and 2. Runs on every pull request. Cheap, fast, blocking.
+#
+# Azure Repos ignores the pr keyword, so pull request runs come from the Build
+# validation policy on main that tools/ado_setup.py creates. That policy has no
+# path filter: the validator also checks ADS and runbook files under docs/.
+trigger:
+  branches:
+    include: [main]
+
+pool:
+  vmImage: ubuntu-latest
+
+jobs:
+  - job: schema_and_standards
+    displayName: schema-and-standards
+    steps:
+      - template: templates/python.yml
+      - script: python tools/validate_rules.py
+        displayName: Validate rule schema and program standards
+
+  - job: sigma_convert
+    displayName: sigma-convert
+    # Proves every rule compiles to the target query language before anyone
+    # tries to deploy it. Swap the backend list for your platform.
+    strategy:
+      matrix:
+        splunk: { backend: splunk }
+    steps:
+      - template: templates/python.yml
+      - script: sigma plugin install $(backend)
+        displayName: Install the $(backend) backend
+      - script: |
+          mkdir -p build/$(backend)
+          sigma convert --target $(backend) --without-pipeline \
+            --output build/$(backend)/rules.txt detections/ || \
+            { echo "##vso[task.logissue type=error]conversion failed for $(backend)"; exit 1; }
+        displayName: Convert
+      - publish: build/$(backend)
+        artifact: compiled-$(backend)
+
+  - job: unit
+    steps:
+      - template: templates/python.yml
+      - script: pytest tests/unit -q
+        displayName: Replay fixtures against rule logic
+
+  - job: coverage
+    dependsOn: schema_and_standards
+    steps:
+      - template: templates/python.yml
+      - script: python tools/coverage_report.py
+        displayName: Coverage metrics and Navigator layer
+      - publish: build
+        artifact: coverage

@@ -1,0 +1,64 @@
+# Gate 7. Only rules at lifecycle stage production ship. Tagged, reversible,
+# and gated behind environments with approvals so a merge alone cannot page
+# the SOC. Add an Approvals check to siem-staging and siem-production in
+# Pipelines, Environments before the first tag: Azure DevOps creates a missing
+# environment on first use with no checks.
+#
+# Each stage reads its own variable group, so the staging stage never sees the
+# production token:
+#   siem-staging      SIEM_URL, SIEM_TOKEN (secret)
+#   siem-production   SIEM_URL, SIEM_TOKEN (secret), SOC_WEBHOOK (secret)
+# Either group can be linked to a Key Vault and carry its own approval check.
+trigger:
+  branches:
+    include: [refs/tags/v*]
+pr: none
+
+stages:
+  - stage: staging
+    variables:
+      - group: siem-staging
+    jobs:
+      - deployment: staging
+        environment: siem-staging
+        pool:
+          vmImage: ubuntu-latest
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: none
+                - checkout: self
+                - template: templates/python.yml
+                - script: python tools/deploy.py --target staging --stage production --stage in_test
+                  displayName: Compile and push to staging
+                  env:
+                    SIEM_URL: $(SIEM_URL)
+                    SIEM_TOKEN: $(SIEM_TOKEN)
+
+  - stage: production
+    dependsOn: staging
+    variables:
+      - group: siem-production
+    jobs:
+      - deployment: production
+        environment: siem-production
+        pool:
+          vmImage: ubuntu-latest
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: none
+                - checkout: self
+                - template: templates/python.yml
+                - script: python tools/deploy.py --target production --stage production
+                  displayName: Compile and push production stage rules only
+                  env:
+                    SIEM_URL: $(SIEM_URL)
+                    SIEM_TOKEN: $(SIEM_TOKEN)
+                - script: python tools/notify.py --release "$RELEASE"
+                  displayName: Notify the SOC
+                  env:
+                    RELEASE: $(Build.SourceBranchName)
+                    SOC_WEBHOOK: $(SOC_WEBHOOK)

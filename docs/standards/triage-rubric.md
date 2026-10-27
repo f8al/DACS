@@ -31,7 +31,7 @@ to 0 to 100 for the rule metadata field.
 
 ## Override
 
-A named leader may override the band, in a comment on the issue, with a reason.
+A named leader may override the band, in a comment on the work item, with a reason.
 Overrides are counted in the monthly report. An override rate above roughly one
 in five means the rubric weights are wrong and should be revisited rather than
 routed around.

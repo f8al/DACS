@@ -1,0 +1,38 @@
+# Keeps the ruleset from rotting. Weekly, files work items instead of failing
+# builds.
+#
+# The build service files the work item, so grant
+# "<project> Build Service (<org>)" Edit work items in this node on the area
+# path. See tools/ado.py for the process specific variables.
+trigger: none
+pr: none
+
+schedules:
+  - cron: "0 13 * * 1"
+    displayName: Weekly hygiene
+    branches:
+      include: [main]
+    always: true          # staleness grows with time, not with commits
+
+pool:
+  vmImage: ubuntu-latest
+
+jobs:
+  - job: staleness
+    steps:
+      - template: templates/python.yml
+      - script: |
+          mkdir -p build
+          python tools/validate_rules.py | tee build/hygiene-report.txt || true
+        displayName: Report rules past review date or past validation freshness
+      - script: python tools/coverage_report.py
+        displayName: Publish metrics
+      - publish: build
+        artifact: weekly-hygiene
+
+      # One standing work item rather than one per week: updated while
+      # findings remain, closed when a run comes back clean.
+      - script: python tools/ado.py hygiene build/hygiene-report.txt
+        displayName: Open, update or close the hygiene work item
+        env:
+          SYSTEM_ACCESSTOKEN: $(System.AccessToken)

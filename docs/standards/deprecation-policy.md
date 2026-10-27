@@ -26,7 +26,7 @@ not evidence of a useless rule. Never deprecate on alert count alone.
 
 ## Process
 
-1. Open a tuning issue with the deprecation proposal and the supporting numbers.
+1. Open a tuning work item with the deprecation proposal and the supporting numbers.
 2. The rule owner and one SOC lead review. Disagreement escalates to the DE lead.
 3. On approval, set lifecycle stage to deprecated with a deprecation_reason, and
    set the Sigma status field to deprecated. The next deployment removes it from
