@@ -15,9 +15,11 @@
 #      true. Set it in the pipeline's Variables, not in this file, which would
 #      override it.
 #
-# Pipeline variables, set in the pipeline's Variables:
-#   DD_API_KEY, DD_APP_KEY      secret
-#   DETONATION_HOST, DETONATION_USER
+# The variable group detonation-lab holds DD_API_KEY and DD_APP_KEY (secret),
+# DETONATION_HOST and DETONATION_USER. Not pipeline variables, which reach a
+# run of any branch. Give the group and the detonation-lab agent pool a Branch
+# control check allowing only refs/heads/main: a queued run of another branch
+# could otherwise rewrite this file and take the keys and the lab agent.
 #
 # The agent needs threatest, git and Python 3 with PyYAML on PATH.
 trigger: none
@@ -43,6 +45,8 @@ stages:
   - stage: network_detonation
     displayName: network-detonation
     condition: eq(variables['DETONATION_ENABLED'], 'true')
+    variables:
+      - group: detonation-lab
     jobs:
       - deployment: network_detonation
         displayName: network-detonation

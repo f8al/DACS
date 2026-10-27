@@ -91,11 +91,11 @@ python tools/coverage_report.py     # metrics plus ATT&CK Navigator layer
    The `deploy` pipeline runs the YAML from the tagged commit, so anyone who
    can push a `v*` tag can rewrite it to skip the environments. Two settings
    close that, because the YAML cannot remove them. In Repos, Security, deny
-   Create tag to Contributors and allow it only to the release owners (Azure
-   DevOps sets tag permissions per repository, not per tag pattern, unless you
-   scope them with `az devops security permission update` on `refs/tags/v*`).
-   In Library, add an Approvals check to both variable groups, and have the
-   approver confirm the run's commit is on `main`.
+   Create tag to Contributors on this repository and allow it only to the
+   release owners. In Library, add an Approvals check to both variable groups,
+   and have the approver confirm the run's commit is on `main`. A Branch
+   control check allowing only `refs/tags/v*` on the groups is worth adding
+   too, but it cannot tell whether the tag points at a commit on `main`.
 9. A self hosted agent pool named `detonation-lab`, with an agent sitting
    inside the network whose telemetry you are testing. A Microsoft hosted agent
    is not inside your monitored network, so detonation from one proves nothing.
@@ -103,8 +103,13 @@ python tools/coverage_report.py     # metrics plus ATT&CK Navigator layer
    `detonate-nightly` unless you pass `--with-detonation`, and the pipeline
    skips its stage unless the pipeline variable `DETONATION_ENABLED` is `true`.
    Do both only once the agent is in place and `detonation-lab` has its
-   approval check. The pipeline also needs the variables `DETONATION_HOST`,
-   `DETONATION_USER` and secrets `DD_API_KEY`, `DD_APP_KEY`:
+   approval check. Put `DETONATION_HOST`, `DETONATION_USER` and the secrets
+   `DD_API_KEY`, `DD_APP_KEY` in a variable group named `detonation-lab`, not
+   in pipeline variables: pipeline variables reach a run of any branch, so
+   anyone who can queue the pipeline with their own YAML would get the keys
+   and a job inside the monitored network. Add a Branch control check allowing
+   only `refs/heads/main` to both the `detonation-lab` variable group and the
+   `detonation-lab` agent pool, which the YAML cannot remove. Then switch it on:
    `az pipelines variable create --pipeline-name detonate-nightly --name DETONATION_ENABLED --value true`.
 10. Validation stamping: the nightly pipeline records passing detonations by
     opening a pull request that updates `last_validated`. A pull request
