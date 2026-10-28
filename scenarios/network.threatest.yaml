@@ -1,14 +1,25 @@
 # Threatest scenarios for network layer detections.
 #
-# Detonator keys confirmed from the Threatest README: remoteDetonator,
-# stratusRedTeamDetonator, awsCliDetonator. Check schemas/threatest.schema.json
-# in the upstream repo before adding a local detonator block, and wire that
-# schema into your editor for autocompletion.
+# Requires the f8al/threatest fork build pinned in detonate-nightly.yml, which
+# adds the theHiveAlert and splunkLog matchers. Schema:
+# https://github.com/f8al/threatest/blob/v1.5.0-dacs.1/schemas/threatest.schema.json
 #
-# Correlation caveat: flightsim does not emit a Threatest correlation UUID.
-# These assertions bind on signal name plus time window plus the source host,
-# so run them from a dedicated detonation host whose address is not shared with
-# anything else that could trip the same rule.
+# Correlation caveat: flightsim does not emit a Threatest correlation UUID. The
+# remote detonator only puts it in the parent process name, which DNS and
+# network telemetry never carry. These assertions use correlation: host, which
+# binds on alert title, alerts created after the run started, and an
+# observable equal to one of the detonation host's addresses
+# (THEHIVE_DETONATION_HOSTS). Run them from a dedicated detonation host whose
+# addresses are not shared with anything else that could trip the same rule.
+#
+# observableField names the Splunk field the alert action turns into the
+# observable. It must be listed in TA-thehive-cortex's thehive_datatypes.csv,
+# e.g. "src_ip,observable,ip,". Without it the field never becomes an
+# observable and the assertion cannot match.
+#
+# Threatest takes the scenario timeout from the first expectation. It must
+# cover the saved search schedule, the rule's correlation timespan, ingest lag,
+# the alert action and TheHive ingestion.
 scenarios:
   - name: DNS tunneling detected from egress host
     detonate:
@@ -16,10 +27,12 @@ scenarios:
         commands:
           - "flightsim run tunnel-dns -fast"
     expectations:
-      - timeout: 10m
-        datadogSecuritySignal:
-          name: "DNS Tunneling via High Volume Unique Subdomains"
-          severity: high
+      - timeout: 30m
+        theHiveAlert:
+          title: "DNS Tunneling via High Volume Unique Subdomains"
+          source: splunk
+          correlation: host
+          observableField: src_ip
 
 # Examples for rules this scaffold does not ship. Every active scenario must
 # assert a rule that exists in detections/, or the nightly run fails and files a
@@ -31,10 +44,12 @@ scenarios:
   #       commands:
   #         - "flightsim run dga -fast"
   #   expectations:
-  #     - timeout: 10m
-  #       datadogSecuritySignal:
-  #         name: "Domain Generation Algorithm Resolution Pattern"
-  #         severity: medium
+  #     - timeout: 30m
+  #       theHiveAlert:
+  #         title: "Domain Generation Algorithm Resolution Pattern"
+  #         source: splunk
+  #         correlation: host
+  #         observableField: src_ip
 
   # - name: Outbound connection to known C2 destination
   #   detonate:
@@ -42,10 +57,12 @@ scenarios:
   #       commands:
   #         - "flightsim run c2 -fast"
   #   expectations:
-  #     - timeout: 10m
-  #       datadogSecuritySignal:
-  #         name: "Egress to Known Command and Control Infrastructure"
-  #         severity: critical
+  #     - timeout: 30m
+  #       theHiveAlert:
+  #         title: "Egress to Known Command and Control Infrastructure"
+  #         source: splunk
+  #         correlation: host
+  #         observableField: src_ip
 
   # - name: Cryptomining pool traffic
   #   detonate:
@@ -53,10 +70,12 @@ scenarios:
   #       commands:
   #         - "flightsim run miner -fast"
   #   expectations:
-  #     - timeout: 10m
-  #       datadogSecuritySignal:
-  #         name: "Stratum Mining Protocol Egress"
-  #         severity: medium
+  #     - timeout: 30m
+  #       theHiveAlert:
+  #         title: "Stratum Mining Protocol Egress"
+  #         source: splunk
+  #         correlation: host
+  #         observableField: src_ip
 
 # Deliberately excluded from the scheduled run, enable per exercise only:
 #   scan     trips IPS blocking and can lock out the source host
