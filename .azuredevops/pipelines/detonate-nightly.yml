@@ -53,8 +53,8 @@ variables:
   # Pinned Threatest fork release. To upgrade, change both values together,
   # taking the hash from the release's checksums.txt. Never use latest: this
   # binary runs on the lab agent next to the detonation secrets.
-  threatestVersion: v1.5.0-dacs.1
-  threatestSha256: bc992b7ef4e0fa84dbea8528767c4e6e4173158cad9469778dd1b0a6f48dbed8
+  threatestVersion: v1.5.0-dacs.2
+  threatestSha256: 6cb8ef3d400d5be08ca9219881c34dbb7787ddd002ea5fed2c843574ede1c4bb
 
 stages:
   - stage: network_detonation
@@ -104,9 +104,14 @@ stages:
                 # detonation from another address in the same window would
                 # muddy the host and time binding the assertions rely on.
                 # Stratus scenarios are the exception, they call the cloud API
-                # from the agent, see scenarios/cloud.threatest.yaml. SSH
-                # authenticates with the agent's ssh-agent or default key; add
-                # --ssh-keyfile to both commands to use a specific one.
+                # from the agent, see scenarios/cloud.threatest.yaml.
+                #
+                # SSH: Threatest and the flightsim step both connect through
+                # the agent user's ~/.ssh/config entry for DETONATION_HOST.
+                # Threatest reads the key from its IdentityFile, which must be
+                # unencrypted because Threatest does not use ssh-agent, and
+                # both refuse a host whose key is not in ~/.ssh/known_hosts.
+                # Setup is in docs/lab-setup.md.
                 #
                 # One results file per scenario file. A file that fails lint or
                 # a scenario that fails does not stop the other files from

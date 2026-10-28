@@ -105,7 +105,8 @@ python tools/coverage_report.py     # metrics plus ATT&CK Navigator layer
    control check allowing only `refs/tags/v*` on the groups is worth adding
    too, but it cannot tell whether the tag points at a commit on `main`.
 9. A self hosted agent pool named `detonation-lab`, with an agent sitting
-   inside the network whose telemetry you are testing. A Microsoft hosted agent
+   inside the network whose telemetry you are testing. The full procedure,
+   from detonation host to first run, is `docs/lab-setup.md`. A Microsoft hosted agent
    is not inside your monitored network, so detonation from one proves nothing.
    The agent needs git, curl, and Python 3 with PyYAML on PATH and SSH
    access to `DETONATION_HOST`. The job installs the pinned

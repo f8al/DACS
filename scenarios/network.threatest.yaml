@@ -2,7 +2,7 @@
 #
 # Requires the f8al/threatest fork build pinned in detonate-nightly.yml, which
 # adds the theHiveAlert and splunkLog matchers. Schema:
-# https://github.com/f8al/threatest/blob/v1.5.0-dacs.1/schemas/threatest.schema.json
+# https://github.com/f8al/threatest/blob/v1.5.0-dacs.2/schemas/threatest.schema.json
 #
 # Correlation caveat: flightsim does not emit a Threatest correlation UUID. The
 # remote detonator only puts it in the parent process name, which DNS and
