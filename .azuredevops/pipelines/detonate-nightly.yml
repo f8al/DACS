@@ -21,8 +21,16 @@
 # control check allowing only refs/heads/main: a queued run of another branch
 # could otherwise rewrite this file and take the keys and the lab agent.
 #
-# The agent needs threatest, git and Python 3 with PyYAML on PATH, and SSH
-# access to DETONATION_HOST, which runs flightsim and any Atomic tests.
+# The agent needs git, curl and Python 3 with PyYAML on PATH, and SSH access
+# to DETONATION_HOST, which runs flightsim and any Atomic tests. Threatest is
+# not taken from PATH: the job installs the f8al/threatest fork build pinned
+# below, which adds the Splunk and TheHive matchers. Upstream DataDog/threatest
+# cannot parse those scenario keys.
+#
+# The variable group also holds DETONATION_HOST_ADDRESSES: every address the
+# detonation host's traffic can carry in an alert (its IPs, NAT address,
+# hostname), comma-separated. Network scenarios bind alerts to the host
+# through it, because flightsim traffic cannot carry the Threatest UUID.
 trigger: none
 pr: none
 
@@ -41,6 +49,11 @@ parameters:
 
 variables:
   stampBranch: automation/stamp-last-validated
+  # Pinned Threatest fork release. To upgrade, change both values together,
+  # taking the hash from the release's checksums.txt. Never use latest: this
+  # binary runs on the lab agent next to the detonation secrets.
+  threatestVersion: v1.5.0-dacs.1
+  threatestSha256: bc992b7ef4e0fa84dbea8528767c4e6e4173158cad9469778dd1b0a6f48dbed8
 
 stages:
   - stage: network_detonation
@@ -63,6 +76,26 @@ stages:
                 - checkout: self
                   persistCredentials: true
                   clean: true
+
+                # Downloads the pinned fork build and refuses to run it unless
+                # the archive matches the pinned hash. Installed under the
+                # agent's temp directory, which is cleared after every job, so
+                # nothing left on the self hosted agent can shadow it.
+                - script: |
+                    set -euo pipefail
+                    dir="$AGENT_TEMPDIRECTORY/threatest-$THREATEST_VERSION"
+                    mkdir -p "$dir"
+                    curl -fsSL --proto '=https' --tlsv1.2 --retry 3 \
+                      -o "$dir/threatest.tar.gz" \
+                      "https://github.com/f8al/threatest/releases/download/$THREATEST_VERSION/threatest_Linux_x86_64.tar.gz"
+                    echo "$THREATEST_SHA256  $dir/threatest.tar.gz" | sha256sum --check --strict -
+                    tar -xzf "$dir/threatest.tar.gz" -C "$dir" threatest
+                    "$dir/threatest" --help >/dev/null
+                    echo "##vso[task.prependpath]$dir"
+                  displayName: Install pinned Threatest fork build
+                  env:
+                    THREATEST_VERSION: $(threatestVersion)
+                    THREATEST_SHA256: $(threatestSha256)
 
                 # Threatest detonates each remoteDetonator scenario on
                 # DETONATION_HOST over SSH, which is where flightsim and Atomic
@@ -105,6 +138,7 @@ stages:
                     DD_APP_KEY: $(DD_APP_KEY)
                     THREATEST_SSH_HOST: $(DETONATION_HOST)
                     THREATEST_SSH_USERNAME: $(DETONATION_USER)
+                    THEHIVE_DETONATION_HOSTS: $(DETONATION_HOST_ADDRESSES)
 
                 # Rules validated by flightsim alone, without a Threatest
                 # scenario. Runs after Threatest has finished so the two never

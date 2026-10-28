@@ -102,8 +102,13 @@ python tools/coverage_report.py     # metrics plus ATT&CK Navigator layer
 9. A self hosted agent pool named `detonation-lab`, with an agent sitting
    inside the network whose telemetry you are testing. A Microsoft hosted agent
    is not inside your monitored network, so detonation from one proves nothing.
-   The agent needs `threatest`, git, and Python 3 with PyYAML on PATH and SSH
-   access to `DETONATION_HOST`; the detonation host needs flightsim, plus
+   The agent needs git, curl, and Python 3 with PyYAML on PATH and SSH
+   access to `DETONATION_HOST`. The job installs the pinned
+   [f8al/threatest](https://github.com/f8al/threatest) fork build itself and
+   checks its hash; upstream Threatest cannot parse the Splunk and TheHive
+   matcher keys. Network scenarios also need `DETONATION_HOST_ADDRESSES` in the
+   `detonation-lab` variable group: every address the detonation host's
+   traffic can appear as in an alert, comma-separated. The detonation host needs flightsim, plus
    PowerShell 7 and Invoke-AtomicRedTeam for Atomic scenarios. Stratus
    scenarios use the agent's own cloud credentials, so scope them to a sandbox
    account. Detonation is off by default, twice over. The setup does not register

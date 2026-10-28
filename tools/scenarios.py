@@ -15,7 +15,13 @@ import sys
 import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-MATCHERS = ("datadogSecuritySignal", "elasticSecuritySignal")
+# Alert matchers and the key holding the alert name, which is the rule title.
+# splunkLog is absent on purpose: it checks telemetry, not a rule's alert.
+MATCHERS = {
+    "datadogSecuritySignal": "name",
+    "elasticSecuritySignal": "name",
+    "theHiveAlert": "title",
+}
 
 # flightsim modules kept out of scheduled runs, see docs/testing-strategy.md.
 UNSCHEDULED_MODULES = {"scan", "spambot", "ssh-exfil", "ssh-transfer"}
@@ -39,9 +45,11 @@ def signal_names(path):
     out = {}
     for sc in load(path):
         for exp in sc.get("expectations", []):
-            for matcher in MATCHERS:
-                if matcher in exp:
-                    out[sc["name"]] = exp[matcher]["name"]
+            if exp.get("discover"):
+                continue  # discovery never fails a scenario, so it asserts nothing
+            for matcher, key in MATCHERS.items():
+                if matcher in exp and (exp[matcher] or {}).get(key):
+                    out[sc["name"]] = exp[matcher][key]
     return out
 
 
