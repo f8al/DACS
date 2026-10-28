@@ -17,8 +17,13 @@
 #
 # The variable group detonation-lab holds SPLUNK_URL, SPLUNK_TOKEN (secret),
 # THEHIVE_URL, THEHIVE_API_KEY (secret), DETONATION_HOST, DETONATION_USER and
-# DETONATION_HOST_ADDRESSES, plus SPLUNK_CA_CERT and THEHIVE_CA_CERT if the lab
-# uses a private CA. Not pipeline variables, which reach a run of any branch. Give the group and the detonation-lab agent pool a Branch
+# DETONATION_HOST_ADDRESSES, plus SPLUNK_CA_CERT and THEHIVE_CA_CERT if the
+# lab uses a private CA. DETONATION_HOST_ADDRESSES lists every address the
+# detonation host's traffic can carry in an alert (its IPs, NAT address,
+# hostname), comma-separated: network scenarios bind alerts to the host
+# through it, because flightsim traffic cannot carry the Threatest UUID.
+# These live in the group, not in pipeline variables, which reach a run of
+# any branch. Give the group and the detonation-lab agent pool a Branch
 # control check allowing only refs/heads/main: a queued run of another branch
 # could otherwise rewrite this file and take the keys and the lab agent.
 #
@@ -27,11 +32,6 @@
 # not taken from PATH: the job installs the f8al/threatest fork build pinned
 # below, which adds the Splunk and TheHive matchers. Upstream DataDog/threatest
 # cannot parse those scenario keys.
-#
-# The variable group also holds DETONATION_HOST_ADDRESSES: every address the
-# detonation host's traffic can carry in an alert (its IPs, NAT address,
-# hostname), comma-separated. Network scenarios bind alerts to the host
-# through it, because flightsim traffic cannot carry the Threatest UUID.
 trigger: none
 pr: none
 
@@ -113,7 +113,33 @@ stages:
                 # running. build/ is removed first because a self hosted agent
                 # keeps its workspace, and last night's results must never be
                 # stamped again.
+                #
+                # A variable missing from the group arrives as the literal text
+                # $(NAME), not as empty. Unchecked, a missing
+                # DETONATION_HOST_ADDRESSES makes every network assertion fail
+                # as a missing alert and files a tuning work item for a rule
+                # that is fine, so stop before detonating and name the variable.
+                # Only names are printed, never values.
                 - script: |
+                    missing=0
+                    # Pairs of environment variable and the group variable
+                    # that feeds it, so the error names what to add.
+                    for pair in SPLUNK_URL:SPLUNK_URL SPLUNK_TOKEN:SPLUNK_TOKEN \
+                        THEHIVE_URL:THEHIVE_URL THEHIVE_API_KEY:THEHIVE_API_KEY \
+                        THREATEST_SSH_HOST:DETONATION_HOST \
+                        THREATEST_SSH_USERNAME:DETONATION_USER \
+                        THEHIVE_DETONATION_HOSTS:DETONATION_HOST_ADDRESSES; do
+                      name=${pair%%:*}
+                      value=${!name-}
+                      case "$value" in
+                        ''|'$('*)
+                          echo "##vso[task.logissue type=error]${pair#*:} is not set in the detonation-lab variable group"
+                          missing=1
+                          ;;
+                      esac
+                    done
+                    [ "$missing" = 0 ] || exit 1
+
                     rm -rf build
                     mkdir -p build/threatest
                     if [ "$SCENARIO" = all ]; then

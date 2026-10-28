@@ -2,8 +2,9 @@
 #
 # Atomic tests run through the same remoteDetonator as flightsim: Threatest
 # connects to DETONATION_HOST over SSH and runs the commands there under a
-# parent process carrying its detonation UUID, which endpoint telemetry can
-# correlate on. The host needs PowerShell 7 and the Invoke-AtomicRedTeam
+# parent process carrying its detonation UUID. Only the processes it starts
+# directly have that parent; see below for what that means for assertions.
+# The host needs PowerShell 7 and the Invoke-AtomicRedTeam
 # module with the atomics folder installed. Every remoteDetonator scenario in
 # the nightly run uses the same host, so an Atomic test for another operating
 # system needs a detonation host of that kind and its own run.
@@ -12,11 +13,17 @@
 # leave persistence behind on the host. Read the test's definition before
 # enabling it: some Atomic tests download payloads or change system settings.
 #
-# When a rule lands, assert it with theHiveAlert and the default
-# correlation: uuid, with observableField naming the field that carries the
-# detonation UUID (the parent process, named /tmp/<uuid>, mapped as in docs/standards/thehive-alert-action.md).
+# When a rule lands, assert it with theHiveAlert and correlation: host, with
+# observableField naming the host name field (mapped as in
+# docs/standards/thehive-alert-action.md). The detonation UUID is only in the
+# parent of the process the detonation starts directly, here pwsh; the
+# technique runs further down the tree, so its event and the alert never carry
+# it. Use correlation: uuid only for a rule that detects a direct child of the
+# detonation or whose telemetry carries process ancestry.
+#
 # An optional splunkLog expectation tells a dead log source apart from a broken
-# rule. Threatest takes the whole scenario's timeout from the FIRST
+# rule. The pwsh launch event does carry the UUID in its parent process, so the
+# query below proves the endpoint telemetry from this run arrived. Threatest takes the whole scenario's timeout from the FIRST
 # expectation, so put the longest first. The index and field names below are
 # examples, use your own.
 #
@@ -34,7 +41,8 @@ scenarios:
   #       theHiveAlert:
   #         title: "Scheduled Task Persistence via Crontab Modification"
   #         source: splunk
-  #         observableField: ParentCommandLine
+  #         correlation: host
+  #         observableField: host
   #     - timeout: 30m
   #       splunkLog:
   #         query: 'index=endpoint "<% .CorrelationID %>"'

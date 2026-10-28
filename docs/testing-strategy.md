@@ -46,8 +46,13 @@ A scenario asserts with `theHiveAlert`: the TheHive alert whose `title` is the
 rule title, bound to the detonation by one of the two correlation modes below.
 It can add a `splunkLog` expectation, which proves the telemetry reached
 Splunk and so separates a missing log source from a broken rule; it names no
-rule and never stamps one. On cleanup Threatest sets each matched alert to
-status Other with the tag Control Validation.
+rule and never stamps one. Cleanup after each scenario sets the alerts it
+binds to the run to status Other and adds the tag Control Validation: with
+`uuid` correlation, every open alert from the past hour containing the run's
+UUID, whatever its title; with `host` correlation, only open alerts with the
+scenario's title and the host observable. Cleanup changes nothing if Other is
+missing or not a Closed-stage alert status, and discovery expectations never
+clean up.
 
 Use `flightsim` alone for a rule whose alert cannot be queried by a Threatest
 matcher yet, or while a scenario is being written. It proves the traffic leaves
@@ -83,8 +88,8 @@ the modules excluded below.
 5. Every scheduled run is announced to the SOC with the detonation host and
    its time window, so a detonation is never mistaken for an incident. Where
    Threatest runs the detonation, the UUID is also in the parent process name
-   on the detonation host. TheHive alerts a run matched are closed as Other
-   with the tag Control Validation. Unannounced detonation is a
+   on the detonation host. TheHive alerts Threatest binds to a run are closed
+   as Other with the tag Control Validation. Unannounced detonation is a
    purple team exercise, which is a different activity with a different approval.
 
 ## Blocked is not the same as undetected
@@ -116,11 +121,20 @@ The UUID has to reach the alert through the telemetry:
 
 - Stratus Red Team puts it in the user agent of every API call, so it lands in
   the CloudTrail event.
-- The remote detonator runs its commands under a parent process named after it
-  (/tmp/<uuid>), so an endpoint rule that returns the parent process carries it.
+- The remote detonator runs its commands as `/tmp/<uuid> -c '<commands>'`, so
+  the UUID is in the parent process of the processes it starts directly, and
+  nowhere further down the tree. flightsim is started directly, so its
+  telemetry carries the UUID in the parent process. An Atomic test is not:
+  pwsh starts Invoke-AtomicTest, which starts a shell, which runs the
+  technique, so the technique's event has pwsh or sh as its parent. An
+  endpoint rule can use `uuid` correlation only if the process it detects is
+  a direct child of the detonation, or its telemetry carries the process
+  ancestry beyond the immediate parent (an EDR or auditd process tree).
+  Otherwise assert it with `host` correlation on the host field, below.
 
-**`host`, for network rules.** Resolver, proxy and flow logs never see a
-process name, so flightsim traffic cannot carry the UUID. These scenarios bind
+**`host`, for network rules and most endpoint rules.** Resolver, proxy and
+flow logs never see a process name, so flightsim traffic cannot carry the
+UUID, and Atomic tests lose it below their first process. These scenarios bind
 instead on the alert title, the alert being created after the run started,
 and an observable exactly equal to one of the detonation host's addresses
 (`DETONATION_HOST_ADDRESSES`, passed to Threatest as
@@ -136,9 +150,9 @@ scheduled job, or real malware on the host. Three things keep it honest:
 2. The nightly pipeline runs flightsim-only rules over SSH only after
    Threatest has finished, so a flightsim-only detonation never falls inside a
    Threatest scenario's window.
-3. Every observable the scenario names, `src_ip` for network rules, is mapped
-   in TA-thehive-cortex, so the address is an exact observable rather than text
-   that happens to match. See `docs/standards/thehive-alert-action.md`.
+3. Every observable the scenario names, `src_ip` for network rules or the
+   host name field for endpoint rules, is mapped in TA-thehive-cortex, so the
+   address is an exact observable rather than text that happens to match. See `docs/standards/thehive-alert-action.md`.
 
 Endpoint telemetry on the detonation host still carries the UUID, so an
 analyst can tie a network alert back to its run through the querying process.
