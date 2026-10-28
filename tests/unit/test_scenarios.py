@@ -16,16 +16,27 @@ def write(tmp_path, body):
 def test_signal_names_reads_each_matchers_title_key(tmp_path):
     path = write(tmp_path, """
 scenarios:
-  - name: datadog
+  - name: elastic
     detonate: {localDetonator: {commands: [true]}}
     expectations:
-      - datadogSecuritySignal: {name: Rule A}
+      - elasticSecuritySignal: {name: Rule A}
   - name: thehive
     detonate: {localDetonator: {commands: [true]}}
     expectations:
       - theHiveAlert: {title: Rule B, source: splunk, correlation: host}
 """)
-    assert scenarios.signal_names(path) == {"datadog": "Rule A", "thehive": "Rule B"}
+    assert scenarios.signal_names(path) == {"elastic": "Rule A", "thehive": "Rule B"}
+
+
+def test_signal_names_does_not_count_datadog(tmp_path):
+    path = write(tmp_path, """
+scenarios:
+  - name: datadog
+    detonate: {localDetonator: {commands: [true]}}
+    expectations:
+      - datadogSecuritySignal: {name: Rule A}
+""")
+    assert scenarios.signal_names(path) == {}
 
 
 def test_signal_names_ignores_telemetry_and_discovery(tmp_path):
