@@ -25,8 +25,10 @@ dashboards, tickets and Threatest assertions, so it is expensive to change.
 - Describe the behavior and the evidence, not the tool: "DNS Tunneling via High
   Volume Unique Subdomains", not "Suspicious DNS" and not "Iodine Detection".
 - Title case, 10 to 120 characters, no vendor product names, no internal jargon.
-- Changing a title requires updating every Threatest scenario that asserts it.
-  The validator fails the build when a scenario asserts a title no rule has.
+- Changing a title requires updating every Threatest scenario that asserts it
+  (the `title:` key of `theHiveAlert`) and the Splunk saved search, whose name
+  TheHive uses as the alert title. The validator fails the build when a
+  scenario asserts a title no rule has.
 
 ## File layout
 

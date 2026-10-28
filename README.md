@@ -4,8 +4,11 @@ A reusable, platform neutral scaffold for running a detection engineering
 program on Azure DevOps. It implements the six phase detection engineering
 lifecycle (Requirements Discovery, Triage, Investigate, Develop, Test, Deploy),
 uses the Palantir ADS framework as the documentation artifact, and closes the
-loop with automated detonation testing via AlphaSOC flightsim and Datadog
-Threatest.
+loop with automated detonation testing via AlphaSOC flightsim and Threatest.
+The SIEM is Splunk, without Enterprise Security, with alerts raised in TheHive
+by TA-thehive-cortex 3.2.1. Threatest asserts against both through the
+`splunkLog` and `theHiveAlert` matchers of the
+[f8al/threatest](https://github.com/f8al/threatest) fork.
 
 The design goal is repeatability: every phase produces an artifact, every
 artifact is checked by CI, and nothing reaches production on trust.
@@ -29,7 +32,8 @@ detections/<platform>/          Sigma rules plus the detection_engineering block
 schema/detection.schema.json    The contract. Everything is enforced here.
 docs/ads/                       One ADS per detection, nine sections, all required
 docs/runbooks/                  What the analyst does when it fires
-docs/standards/                 Detection standard, triage rubric, definition of done, deprecation policy
+docs/standards/                 Detection standard, triage rubric, definition of done, deprecation policy,
+                                TheHive alert action settings
 docs/testing-strategy.md        The six testing tiers and detonation safety rules
 scenarios/*.threatest.yaml      End to end assertions: flightsim and Atomic on the detonation host, Stratus in the cloud
 tests/unit, tests/data          Fixture replay, one positive and one negative per rule
@@ -58,12 +62,13 @@ python tools/coverage_report.py     # metrics plus ATT&CK Navigator layer
 2. `.azuredevops/pipelines/validate.yml`: set the `backend` matrix to your platform.
 3. `tools/deploy.py`: implement `push()` for your SIEM. This is the only file
    that cannot be platform neutral and it is deliberately isolated.
-4. `scenarios/*.threatest.yaml`: the alert matcher keys shown are for Datadog.
-   Threatest ships matchers for Datadog and Elastic. For any other platform,
-   implement a matcher against the Go interface: authenticate, poll the alert
-   API, filter on name plus time window plus correlation id, return a boolean.
-   Each rule validates through a Threatest scenario or through flightsim alone;
-   `docs/testing-strategy.md` explains the choice and what each one proves.
+4. `scenarios/*.threatest.yaml`: scenarios assert the TheHive alert with
+   `theHiveAlert` and can check telemetry with `splunkLog`. Both matchers ship
+   in the f8al/threatest fork, so there is nothing to implement, but the Splunk
+   alert action must be configured as in
+   `docs/standards/thehive-alert-action.md`. Each rule validates through a
+   Threatest scenario or through flightsim alone; `docs/testing-strategy.md`
+   explains the choice, the two correlation modes, and what each one proves.
 5. Run the setup once, with a personal access token in `AZURE_DEVOPS_EXT_PAT`
    (scopes listed in the script):
    `python tools/ado_setup.py --org https://dev.azure.com/your-org --project your-project --repo your-repo`.
@@ -115,9 +120,12 @@ python tools/coverage_report.py     # metrics plus ATT&CK Navigator layer
    `detonate-nightly` unless you pass `--with-detonation`, and the pipeline
    skips its stage unless the pipeline variable `DETONATION_ENABLED` is `true`.
    Do both only once the agent is in place and `detonation-lab` has its
-   approval check. Put `DETONATION_HOST`, `DETONATION_USER` and the secrets
-   `DD_API_KEY`, `DD_APP_KEY` in a variable group named `detonation-lab`, not
-   in pipeline variables: pipeline variables reach a run of any branch, so
+   approval check. Put `DETONATION_HOST`, `DETONATION_USER`,
+   `DETONATION_HOST_ADDRESSES`, `SPLUNK_URL`, `THEHIVE_URL` and the secrets
+   `SPLUNK_TOKEN` and `THEHIVE_API_KEY` in a variable group named
+   `detonation-lab`, with `SPLUNK_CA_CERT` and `THEHIVE_CA_CERT` too if the lab
+   uses a private CA (and uncomment them in the pipeline), not in pipeline
+   variables: pipeline variables reach a run of any branch, so
    anyone who can queue the pipeline with their own YAML would get the keys
    and a job inside the monitored network. Add a Branch control check allowing
    only `refs/heads/main` to both the `detonation-lab` variable group and the
@@ -154,4 +162,4 @@ useless.
 - Elastic Detection Engineering Behavior Maturity Model: elastic.co/security-labs/elastic-releases-debmm
 - Elastic detection-rules: github.com/elastic/detection-rules
 - AlphaSOC flightsim: github.com/alphasoc/flightsim
-- Datadog Threatest: github.com/DataDog/threatest
+- Datadog Threatest: github.com/DataDog/threatest, run here as the fork github.com/f8al/threatest

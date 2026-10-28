@@ -12,9 +12,16 @@ test:
 coverage:
 	python tools/coverage_report.py
 
-# Local detonation. Requires threatest on PATH, flightsim on the detonation
-# host, and DETONATION_HOST set to an approved host. Read
-# docs/testing-strategy.md before running this anywhere that is not a lab.
+# Local detonation. Requires the f8al/threatest fork build on PATH, from
+# https://github.com/f8al/threatest/releases (upstream Threatest cannot parse
+# the splunkLog and theHiveAlert keys), flightsim on the detonation host, and
+# in the environment:
+#   DETONATION_HOST, DETONATION_USER    an approved detonation host
+#   THEHIVE_DETONATION_HOSTS            its addresses, for host correlation
+#   SPLUNK_URL, SPLUNK_TOKEN            splunkLog
+#   THEHIVE_URL, THEHIVE_API_KEY        theHiveAlert
+#   SPLUNK_CA_CERT, THEHIVE_CA_CERT     only with a private CA
+# Read docs/testing-strategy.md before running this anywhere that is not a lab.
 detonate:
 	mkdir -p build/threatest
 	for f in $$(python tools/scenarios.py active); do \

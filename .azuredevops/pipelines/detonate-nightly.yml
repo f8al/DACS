@@ -15,9 +15,10 @@
 #      true. Set it in the pipeline's Variables, not in this file, which would
 #      override it.
 #
-# The variable group detonation-lab holds DD_API_KEY and DD_APP_KEY (secret),
-# DETONATION_HOST and DETONATION_USER. Not pipeline variables, which reach a
-# run of any branch. Give the group and the detonation-lab agent pool a Branch
+# The variable group detonation-lab holds SPLUNK_URL, SPLUNK_TOKEN (secret),
+# THEHIVE_URL, THEHIVE_API_KEY (secret), DETONATION_HOST, DETONATION_USER and
+# DETONATION_HOST_ADDRESSES, plus SPLUNK_CA_CERT and THEHIVE_CA_CERT if the lab
+# uses a private CA. Not pipeline variables, which reach a run of any branch. Give the group and the detonation-lab agent pool a Branch
 # control check allowing only refs/heads/main: a queued run of another branch
 # could otherwise rewrite this file and take the keys and the lab agent.
 #
@@ -130,12 +131,23 @@ stages:
                     done
                     exit $status
                   displayName: Detonate and assert via Threatest
+                  # Everything below reaches the script only through the
+                  # environment, never interpolated into the script body: a run
+                  # parameter cannot inject shell, and the secrets are masked
+                  # and never echoed.
                   env:
-                    # Passed through the environment, not interpolated into
-                    # the script, so a run parameter cannot inject shell.
                     SCENARIO: ${{ parameters.scenario }}
-                    DD_API_KEY: $(DD_API_KEY)
-                    DD_APP_KEY: $(DD_APP_KEY)
+                    SPLUNK_URL: $(SPLUNK_URL)
+                    SPLUNK_TOKEN: $(SPLUNK_TOKEN)
+                    THEHIVE_URL: $(THEHIVE_URL)
+                    THEHIVE_API_KEY: $(THEHIVE_API_KEY)
+                    # Uncomment for a private CA, with the CA file paths on the
+                    # agent in the variable group. Left commented because an
+                    # undefined variable arrives as the literal text $(NAME),
+                    # not as empty. Never set the *_INSECURE_SKIP_VERIFY
+                    # variables.
+                    #   SPLUNK_CA_CERT: $(SPLUNK_CA_CERT)
+                    #   THEHIVE_CA_CERT: $(THEHIVE_CA_CERT)
                     THREATEST_SSH_HOST: $(DETONATION_HOST)
                     THREATEST_SSH_USERNAME: $(DETONATION_USER)
                     THEHIVE_DETONATION_HOSTS: $(DETONATION_HOST_ADDRESSES)

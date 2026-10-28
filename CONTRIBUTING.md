@@ -29,9 +29,11 @@
 - Reject "may generate noise" as a false positive entry. Name the source.
 - Reject an empty Blind Spots section. Every behavioral detection has an evasion.
   If the author cannot name one, they do not understand the technique yet.
-- Check that a renamed title was renamed in every Threatest scenario too. CI
-  fails when a scenario asserts a title no rule has, but not when a scenario
-  still asserts the right title for the wrong reason.
+- Check that a renamed title was renamed in every Threatest scenario too, which
+  for `theHiveAlert` is its `title:` key, and in the Splunk saved search name
+  that TheHive takes the alert title from. CI fails when a scenario asserts a
+  title no rule has, but not when a scenario still asserts the right title for
+  the wrong reason.
 - Ask what the expected weekly volume is and where the number came from.
 - Ask who gets paged and whether the runbook justifies it.
 

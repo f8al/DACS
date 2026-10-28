@@ -77,8 +77,12 @@ flightsim run tunnel-dns -fast
 ```
 
 Automated: scenarios/network.threatest.yaml, scenario name
-"DNS tunneling detected from egress host", asserted with a ten minute timeout.
-Runs in the nightly detonation job. Requires egress access from the detonation
+"DNS tunneling detected from egress host", asserted in TheHive with a thirty
+minute timeout and host correlation: an alert with this rule's title, created
+after the run started, with a `src_ip` observable equal to a detonation host
+address. Resolver logs never carry the Threatest UUID, so the binding is the
+dedicated detonation host, see docs/testing-strategy.md, Correlation. Runs in
+the nightly detonation job. Requires egress access from the detonation
 host and prior approval, because flightsim tunnel-dns queries an AlphaSOC
 operated sandbox domain.
 

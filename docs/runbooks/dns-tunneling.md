@@ -32,9 +32,14 @@ names, which is how DNS tunneling both exfiltrates and receives commands.
 - The registered domain belongs to a deployed security or email product and the
   querying process matches that product.
 - The source is the authorized vulnerability scanner performing enumeration.
-- The activity traces to a detonation run from the detonation host. Confirm the
-  querying process has a parent whose name contains the Threatest detonation
-  UUID before assuming this.
+- The alert is a test run: TheHive status Other with the tag Control
+  Validation. Threatest closed it after matching it to the nightly detonation.
+- The activity traces to a detonation run from the detonation host that has not
+  been closed yet. Confirm the source address is one of the detonation host's,
+  the time falls in the announced window, and, where endpoint telemetry exists
+  for the host, the querying process has a parent whose name contains the
+  Threatest detonation UUID. The alert itself cannot carry the UUID, which is
+  why the address and window matter.
 
 ## Escalate when
 
