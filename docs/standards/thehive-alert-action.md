@@ -13,9 +13,15 @@ or it never becomes an observable and the assertion cannot match.
 - Network rules, `correlation: host`: the source address field, for example
   `src_ip,observable,ip,`. The scenario's `observableField` names the same
   field.
+- Endpoint rules detonated with Atomic tests, `correlation: host`: the host
+  name field, for example `host,observable,hostname,`. The detonation UUID
+  does not reach the technique's process, see docs/testing-strategy.md,
+  Correlation.
 - UUID scenarios: the field that carries the detonation UUID, for example
-  `userAgent,observable,user-agent,` for Stratus and
-  `ParentCommandLine,observable,other,` for endpoint rules.
+  `userAgent,observable,user-agent,` for Stratus. For an endpoint rule, only
+  when the detected process is a direct child of the detonation (its
+  `ParentCommandLine` holds `/tmp/<uuid>`) or the telemetry carries process
+  ancestry.
 
 Map each field by name. The "All fields" scope is broken in 3.2.
 
@@ -33,7 +39,15 @@ the `title:` of every `theHiveAlert` that asserts it.
 
 ## Test runs
 
-Threatest closes every alert it matched with status Other and the tag Control
-Validation. Exclude that tag from TheHive notifications, Functions and Cortex
-responders, so a detonation never pages anyone or triggers an automated
-response.
+After each scenario, Threatest sets status Other and adds the tag Control
+Validation to every open alert it binds to the run:
+
+- `correlation: uuid`: every alert from the past hour whose observables or
+  description contain the run's UUID, whatever its title.
+- `correlation: host`: only alerts with the scenario's title and an
+  observable equal to a detonation host address.
+
+It changes nothing if Other is missing or not a Closed-stage alert status,
+and discovery expectations never clean up. Exclude the tag from TheHive
+notifications, Functions and Cortex responders, so a detonation never pages
+anyone or triggers an automated response.
