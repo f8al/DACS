@@ -12,6 +12,14 @@
 # techniques. Read the technique's page for what it creates and what it costs
 # before enabling it.
 #
+# When a rule lands, assert it with theHiveAlert and the default
+# correlation: uuid, with observableField naming the field that carries the
+# detonation UUID (Stratus puts it in the user agent, mapped as in docs/standards/thehive-alert-action.md).
+# An optional splunkLog expectation tells a dead log source apart from a broken
+# rule. Threatest takes the whole scenario's timeout from the FIRST
+# expectation, so put the longest first. The index and field names below are
+# examples, use your own.
+#
 # Every active scenario must assert a rule that exists in detections/; the
 # validator fails the build otherwise. Uncomment each one when its rule lands.
 scenarios:
@@ -20,7 +28,11 @@ scenarios:
   #     stratusRedTeamDetonator:
   #       attackTechnique: aws.defense-evasion.cloudtrail-stop
   #   expectations:
-  #     - timeout: 15m
-  #       datadogSecuritySignal:
-  #         name: "Cloud Audit Logging Stopped"
-  #         severity: high
+  #     - timeout: 30m
+  #       theHiveAlert:
+  #         title: "Cloud Audit Logging Stopped"
+  #         source: splunk
+  #         observableField: userAgent
+  #     - timeout: 30m
+  #       splunkLog:
+  #         query: 'index=aws_cloudtrail "<% .CorrelationID %>"'

@@ -12,6 +12,14 @@
 # leave persistence behind on the host. Read the test's definition before
 # enabling it: some Atomic tests download payloads or change system settings.
 #
+# When a rule lands, assert it with theHiveAlert and the default
+# correlation: uuid, with observableField naming the field that carries the
+# detonation UUID (the parent process, named /tmp/<uuid>, mapped as in docs/standards/thehive-alert-action.md).
+# An optional splunkLog expectation tells a dead log source apart from a broken
+# rule. Threatest takes the whole scenario's timeout from the FIRST
+# expectation, so put the longest first. The index and field names below are
+# examples, use your own.
+#
 # Every active scenario must assert a rule that exists in detections/; the
 # validator fails the build otherwise. Uncomment each one when its rule lands.
 scenarios:
@@ -22,7 +30,11 @@ scenarios:
   #         - pwsh -NoProfile -Command "Invoke-AtomicTest T1053.003 -TestNumbers 1"
   #         - pwsh -NoProfile -Command "Invoke-AtomicTest T1053.003 -TestNumbers 1 -Cleanup"
   #   expectations:
-  #     - timeout: 15m
-  #       datadogSecuritySignal:
-  #         name: "Scheduled Task Persistence via Crontab Modification"
-  #         severity: medium
+  #     - timeout: 30m
+  #       theHiveAlert:
+  #         title: "Scheduled Task Persistence via Crontab Modification"
+  #         source: splunk
+  #         observableField: ParentCommandLine
+  #     - timeout: 30m
+  #       splunkLog:
+  #         query: 'index=endpoint "<% .CorrelationID %>"'

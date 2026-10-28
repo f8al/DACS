@@ -9,7 +9,7 @@ A rule must pass every tier below the one it claims.
 | 2. Compile | Does it translate to our query language | sigma convert | Every PR | Seconds |
 | 3. Fixture replay | Does the logic match known bad and ignore known good | pytest, tests/data | Every PR | Seconds |
 | 4. Detonation | Does the real technique produce the real telemetry | flightsim, Atomic Red Team, Stratus Red Team | Nightly | Minutes |
-| 5. End to end assertion | Did the alert actually appear in the SIEM | Threatest | Nightly | Minutes to hours |
+| 5. End to end assertion | Did the alert actually appear in TheHive | Threatest | Nightly | Minutes to hours |
 | 6. Adversarial | Does it survive an operator who is trying to evade it | Purple team exercise | Quarterly | Days |
 
 ## What each tier does not prove
@@ -30,7 +30,7 @@ The nightly job runs two kinds of detonation. A rule picks one with
 
 | Method | What runs | Tier reached | Stamps last_validated |
 |---|---|---|---|
-| `threatest` | Every active scenario in the rule's `scenario_file`, detonated and then asserted against the SIEM | 5 | Yes, automatically on a pass |
+| `threatest` | Every active scenario in the rule's `scenario_file`, detonated and then asserted against TheHive | 5 | Yes, automatically on a pass |
 | `flightsim` | The rule's `detonation_command` on the detonation host, with no assertion | 4 | No |
 
 Threatest is the default and the only path to an automatic stamp. Its
@@ -41,6 +41,13 @@ detonator is chosen per scenario:
   through PowerShell (`scenarios/endpoint.threatest.yaml`).
 - `stratusRedTeamDetonator` runs a Stratus Red Team technique against a cloud
   sandbox account from the runner (`scenarios/cloud.threatest.yaml`).
+
+A scenario asserts with `theHiveAlert`: the TheHive alert whose `title` is the
+rule title, bound to the detonation by one of the two correlation modes below.
+It can add a `splunkLog` expectation, which proves the telemetry reached
+Splunk and so separates a missing log source from a broken rule; it names no
+rule and never stamps one. On cleanup Threatest sets each matched alert to
+status Other with the tag Control Validation.
 
 Use `flightsim` alone for a rule whose alert cannot be queried by a Threatest
 matcher yet, or while a scenario is being written. It proves the traffic leaves
@@ -73,9 +80,11 @@ the modules excluded below.
    enough data to trip bandwidth and DLP controls. The validator rejects all
    four in rules and scenarios.
 4. tunnel-icmp requires superuser privileges on the detonation host.
-5. Every scheduled run is announced to the SOC with the detonation host and the
-   Threatest detonation UUID in the parent process, so a
-   detonation is never mistaken for an incident. Unannounced detonation is a
+5. Every scheduled run is announced to the SOC with the detonation host and
+   its time window, so a detonation is never mistaken for an incident. Where
+   Threatest runs the detonation, the UUID is also in the parent process name
+   on the detonation host. TheHive alerts a run matched are closed as Other
+   with the tag Control Validation. Unannounced detonation is a
    purple team exercise, which is a different activity with a different approval.
 
 ## Blocked is not the same as undetected
@@ -97,14 +106,39 @@ credibility with the platform and network teams.
 
 ## Correlation
 
-Threatest assigns a UUID to each detonation and binds the matched alert to it,
-which is what keeps assertions from passing on unrelated alerts of the same name.
-flightsim does not do this. When flightsim is used as the detonator, the
-assertion binds on signal name plus time window plus source address, so the
-detonation host must not share its address with anything else that could trip
-the same rule. The nightly pipeline runs flightsim on the detonation host only, either
-through the Threatest remote detonator, which executes it under a parent
-process containing the detonation UUID, or for flightsim-only rules over SSH
-after Threatest has finished, so the two never share a window. Endpoint telemetry on that host can
-correlate against the UUID; resolver and network logs cannot, which is why the
-address rule above still applies.
+`theHiveAlert` binds an alert to the detonation in one of two ways, set per
+expectation with `correlation`. Without one, an assertion could pass on an
+unrelated alert of the same name.
+
+**`uuid`, the default.** Threatest assigns a UUID to each detonation, and the
+matcher accepts only an alert whose observables or description contain it.
+The UUID has to reach the alert through the telemetry:
+
+- Stratus Red Team puts it in the user agent of every API call, so it lands in
+  the CloudTrail event.
+- The remote detonator runs its commands under a parent process named after it
+  (/tmp/<uuid>), so an endpoint rule that returns the parent process carries it.
+
+**`host`, for network rules.** Resolver, proxy and flow logs never see a
+process name, so flightsim traffic cannot carry the UUID. These scenarios bind
+instead on the alert title, the alert being created after the run started,
+and an observable exactly equal to one of the detonation host's addresses
+(`DETONATION_HOST_ADDRESSES`, passed to Threatest as
+`THEHIVE_DETONATION_HOSTS`).
+
+Host correlation is weaker. Anything else that trips the same rule from the
+same address while the scenario waits passes the assertion: another test, a
+scheduled job, or real malware on the host. Three things keep it honest:
+
+1. The detonation host is dedicated, and none of its addresses is shared with
+   anything that could trip the same rule. A NAT address shared with other
+   hosts defeats it.
+2. The nightly pipeline runs flightsim-only rules over SSH only after
+   Threatest has finished, so a flightsim-only detonation never falls inside a
+   Threatest scenario's window.
+3. Every observable the scenario names, `src_ip` for network rules, is mapped
+   in TA-thehive-cortex, so the address is an exact observable rather than text
+   that happens to match. See `docs/standards/thehive-alert-action.md`.
+
+Endpoint telemetry on the detonation host still carries the UUID, so an
+analyst can tie a network alert back to its run through the querying process.

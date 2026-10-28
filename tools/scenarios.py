@@ -18,7 +18,6 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 # Alert matchers and the key holding the alert name, which is the rule title.
 # splunkLog is absent on purpose: it checks telemetry, not a rule's alert.
 MATCHERS = {
-    "datadogSecuritySignal": "name",
     "elasticSecuritySignal": "name",
     "theHiveAlert": "title",
 }
