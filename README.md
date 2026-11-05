@@ -48,7 +48,9 @@ python tools/coverage_report.py     # metrics plus ATT&CK Navigator layer
 
 ## What you must change to adopt this
 
-1. `.github/CODEOWNERS`: replace the placeholder teams.
+1. `.github/CODEOWNERS`: run
+   `python tools/github_setup.py --org your-org --team OLD=NEW` to replace the
+   placeholder organisation and rename teams, then commit the result.
 2. `.github/workflows/validate.yml`: set the `backend` matrix to your platform.
 3. `tools/deploy.py`: implement `push()` for your SIEM. This is the only file
    that cannot be platform neutral and it is deliberately isolated.
