@@ -2,8 +2,8 @@
 # tools/ado_setup.py turns each entry into a Required reviewers policy on the
 # default branch.
 #
-# Replace your-project with your project and each group with a team or group
-# that exists. One approval from any listed group satisfies an entry; the two
+# ado_setup.py replaces your-project with --project and renames groups given
+# as --group OLD=NEW, or edit by hand. Every group must exist. One approval from any listed group satisfies an entry; the two
 # approval minimum comes from the Minimum number of reviewers policy.
 #
 # Later entries win, as in CODEOWNERS. /.azuredevops/ is last so this file and

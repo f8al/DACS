@@ -5,6 +5,9 @@ Does what CODEOWNERS and repository settings did on GitHub:
 
   * registers the validate, deploy and hygiene pipelines, and detonate-nightly
     only when --with-detonation is passed
+  * rewrites .azuredevops/reviewers.yml with the real project in place of
+    [your-project] and renames the groups given with --group; commit the file
+    afterwards
   * on the default branch, a two approval minimum, a blocking validate build,
     a work item linking reminder, and one Required reviewers policy per entry
     in .azuredevops/reviewers.yml
@@ -21,10 +24,16 @@ that has Code (read, write and manage), Build (read and execute), Work Items
 (read and write), Identity (read) and Project and Team (read):
 
   python tools/ado_setup.py --org https://dev.azure.com/your-org \\
-      --project your-project --repo detections
+      --project your-project --repo detections \\
+      --group detection-engineering=CSIRT --group soc-leads=SOC-Leads
+
+--group renames a group by the part after the backslash. A new name without a
+[project] prefix gets the --project one.
 """
 import argparse
+import json
 import pathlib
+import re
 import sys
 import urllib.parse
 
@@ -35,6 +44,9 @@ from ado import WORK_ITEM_TYPE, Client
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ADO = ROOT / ".azuredevops"
 PIPELINES = ["validate", "deploy", "hygiene"]
+PLACEHOLDER = "your-project"
+GROUP = re.compile(r"\[([^\]]+)\]\\(.+)")
+QUOTED = re.compile(r'"(?:[^"\\]|\\.)*"')
 
 
 def ensure_pipelines(client, repo, names):
@@ -70,6 +82,71 @@ def identity(client, name):
     if not found:
         sys.exit(f"no identity named {name}, check .azuredevops/reviewers.yml")
     return found[0]["id"]
+
+
+def short(group):
+    """The name after the backslash in [project]\\name."""
+    m = GROUP.fullmatch(group)
+    return m.group(2) if m else group
+
+
+def group_name(group, project, renames):
+    """[your-project]\\name with the real project, or the --group replacement."""
+    m = GROUP.fullmatch(group)
+    if not m:
+        return group
+    owner, name = m.groups()
+    name = renames.get(name, name)
+    if GROUP.fullmatch(name):
+        return name
+    return f"[{project if owner == PLACEHOLDER else owner}]\\{name}"
+
+
+def rewrite_reviewers(text, project, renames):
+    """reviewers.yml text with every group passed through group_name. Edits the
+    quoted strings in place, so the comments and layout survive."""
+    entries = yaml.safe_load(text)
+    groups = [g for entry in entries for g in entry["groups"]]
+    present = {short(g) for g in groups}
+    # A rename whose target is already there was applied by an earlier run.
+    done = {old for old, new in renames.items() if short(new) in present}
+    if unknown := sorted(set(renames) - present - done):
+        sys.exit(f"--group names not in reviewers.yml: {', '.join(unknown)}")
+    mapping = {g: group_name(g, project, renames) for g in groups}
+
+    def sub(m):
+        try:
+            value = json.loads(m.group(0))
+        except ValueError:
+            return m.group(0)
+        return json.dumps(mapping[value]) if value in mapping else m.group(0)
+
+    out = QUOTED.sub(sub, text)
+    want = [[mapping[g] for g in entry["groups"]] for entry in entries]
+    if [entry["groups"] for entry in yaml.safe_load(out)] != want:
+        sys.exit("could not rewrite reviewers.yml in place, edit it by hand")
+    return out
+
+
+def update_reviewers(project, renames):
+    path = ADO / "reviewers.yml"
+    text = path.read_text()
+    new = rewrite_reviewers(text, project, renames)
+    if new == text:
+        print("reviewers.yml unchanged")
+        return
+    path.write_text(new)
+    print("reviewers.yml updated, commit it")
+
+
+def parse_renames(values):
+    renames = {}
+    for value in values:
+        old, sep, new = value.partition("=")
+        if not (sep and old and new):
+            sys.exit(f"--group wants OLD=NEW, got {value}")
+        renames[old] = new
+    return renames
 
 
 def reviewer_policies(client):
@@ -165,8 +242,11 @@ def main():
     ap.add_argument("--team", help="team that owns the work item templates, defaults to '<project> Team'")
     ap.add_argument("--with-detonation", action="store_true",
                     help="also register detonate-nightly, see README before passing this")
+    ap.add_argument("--group", action="append", default=[], metavar="OLD=NEW",
+                    help="rename a reviewers.yml group, for example detection-engineering=CSIRT; repeatable")
     args = ap.parse_args()
 
+    update_reviewers(args.project, parse_renames(args.group))
     client = Client(args.org, args.project)
     repo = client.call("GET", client.url(f"_apis/git/repositories/{urllib.parse.quote(args.repo)}"))
     names = PIPELINES + (["detonate-nightly"] if args.with_detonation else [])

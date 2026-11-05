@@ -58,7 +58,8 @@ python tools/coverage_report.py     # metrics plus ATT&CK Navigator layer
 
 ## What you must change to adopt this
 
-1. `.azuredevops/reviewers.yml`: replace the placeholder project and groups.
+1. `.azuredevops/reviewers.yml`: the setup in step 5 replaces the placeholder
+   project and renames groups passed as `--group OLD=NEW`. Commit the result.
 2. `.azuredevops/pipelines/validate.yml`: set the `backend` matrix to your platform.
 3. `tools/deploy.py`: implement `push()` for your SIEM. This is the only file
    that cannot be platform neutral and it is deliberately isolated.
